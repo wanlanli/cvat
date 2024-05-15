@@ -1,0 +1,59 @@
+metadata:
+  name: tf-yeast2-inception-v2-coco
+  namespace: cvat
+  annotations:
+    name: yeast2 via Tensorflow
+    type: detector
+    framework: tensorflow
+    spec: |
+      [
+        { "id": 1, "name": "cell", "type": "polygon"},
+        { "id": 2, "name": "mating", "type": "polygon"},
+        { "id": 3, "name": "fusion", "type": "polygon"},
+        { "id": 4, "name": "tetrad", "type": "polygon"},
+        { "id": 5, "name": "unknown", "type": "polygon"}
+      ]
+
+spec:
+  description: Faster RCNN from Tensorflow Object Detection API
+  runtime: 'python:3.9'
+  handler: main:handler
+  eventTimeout: 30s
+
+  build:
+    image: cvat.tf.yeast2_inception_v2_coco
+    baseImage: tensorflow/tensorflow:2.10.1
+
+    directives:
+      preCopy:
+        - kind: RUN
+          value: apt-get update && apt-get -y install curl git
+        - kind: WORKDIR
+          value: /opt/nuclio
+
+      postCopy:
+        - kind: RUN
+          value: git clone https://github.com/wanlanli/deepYeast
+        - kind: RUN
+          value: ln -s deepYeast deepyeast
+        - kind: RUN
+          value: pip install pillow pyyaml scikit-image
+        - kind: RUN
+          value: cd deepYeast
+        - kind: RUN
+          value: mkdir models
+
+  triggers:
+    myHttpTrigger:
+      maxWorkers: 2
+      kind: 'http'
+      workerAvailabilityTimeoutMilliseconds: 10000
+      attributes:
+        maxRequestBodySize: 33554432 # 32MB
+
+  platform:
+    attributes:
+      restartPolicy:
+        name: always
+        maximumRetryCount: 3
+      mountMode: volume
