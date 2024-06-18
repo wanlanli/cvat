@@ -125,13 +125,14 @@ class IMediaReader(ABC):
         #     See Issue for further details: https://github.com/python-pillow/Pillow/issues/3011
         #     Issue was opened 2018, so don't expect any changes soon and work with manual conversions.
         mode: str = preview.mode
-        if mode == "I;16":
+        if (mode == "I;16") | (mode == "I;16B") | (mode == "I;16L"):
+            print("!!!!!! mode is uint16")
             preview = np.array(preview, dtype=np.uint16) # 'I;16' := Unsigned Integer 16, Grayscale
-            image = image - image.min()                  # In case the used range lies in [a, 2^16] with a > 0
+            preview = preview - preview.min()                  # In case the used range lies in [a, 2^16] with a > 0
             preview = preview / preview.max() * 255      # Downscale into real numbers of range [0, 255]
             preview = preview.astype(np.uint8)           # Floor to integers of range [0, 255]
             preview = Image.fromarray(preview, mode="L") # 'L' := Unsigned Integer 8, Grayscale
-            preview = ImageOps.equalize(preview)         # The Images need equalization. High resolution with 16-bit but only small range that actually contains information
+            # preview = ImageOps.equalize(preview)         # The Images need equalization. High resolution with 16-bit but only small range that actually contains information
         preview.thumbnail(PREVIEW_SIZE)
 
         return preview
@@ -620,13 +621,13 @@ class IChunkWriter(ABC):
         # Seems like an internal Bug of PIL
         #     See Issue for further details: https://github.com/python-pillow/Pillow/issues/3011
         #     Issue was opened 2018, so don't expect any changes soon and work with manual conversions.
-        if image.mode == "I;16":
+        if (image.mode == "I;16") | (image.mode == "I;16B") | (image.mode == "I;16L"):
             image = np.array(image, dtype=np.uint16) # 'I;16' := Unsigned Integer 16, Grayscale
             image = image - image.min()              # In case the used range lies in [a, 2^16] with a > 0
             image = image / image.max() * 255        # Downscale into real numbers of range [0, 255]
             image = image.astype(np.uint8)           # Floor to integers of range [0, 255]
             image = Image.fromarray(image, mode="L") # 'L' := Unsigned Integer 8, Grayscale
-            image = ImageOps.equalize(image)         # The Images need equalization. High resolution with 16-bit but only small range that actually contains information
+            # image = ImageOps.equalize(image)         # The Images need equalization. High resolution with 16-bit but only small range that actually contains information
 
         converted_image = image.convert('RGB')
 
@@ -675,7 +676,13 @@ class ZipChunkWriter(IChunkWriter):
                             if image.format == 'TIFF':
                                 # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html
                                 # use loseless lzw compression for tiff images
-                                rot_image.save(output, format='TIFF', compression='tiff_lzw')
+                                rot_image = np.array(rot_image)
+                                rot_image = Image.fromarray(rot_image)
+                                # rot_image.save(output, format='TIFF', compression='tiff_lzw')
+                                rot_image.save(output,
+                                               format='TIFF',
+                                               quality=100,
+                                               subsampling=0)
                             else:
                                 rot_image.save(
                                     output,
