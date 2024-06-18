@@ -33,7 +33,7 @@ from .registry import dm_env, exporter, importer
 class CvatPath:
     IMAGES_DIR = 'images'
 
-    MEDIA_EXTS = ('.jpg', '.jpeg', '.png')
+    MEDIA_EXTS = ('.jpg', '.jpeg', '.png', '.tif')
 
     BUILTIN_ATTRS = {'occluded', 'outside', 'keyframe', 'track_id'}
 
@@ -97,6 +97,7 @@ class CvatExtractor(Extractor):
             for file in sorted(glob(image_dir), key=osp.basename):
                 name, ext = osp.splitext(osp.basename(file))
                 if ext.lower() in CvatPath.MEDIA_EXTS:
+
                     items[(subset, name)] = DatasetItem(id=name, annotations=[],
                         image=Image(path=file), subset=subset or DEFAULT_SUBSET_NAME,
                     )
