@@ -32,7 +32,10 @@ def handler(context, event):
     data = event.body
     buf = io.BytesIO(base64.b64decode(data["image"]))
     image = Image.open(buf)
-    image = np.array(image.convert("L"))
+    if (image.mode == "I;16") | (image.mode == "I;16B") | (image.mode == "I;16L") | (image.mode == "I"):
+        image = np.array(image)
+    else:
+        image = np.array(image.convert("L"))
     if image.ndim == 3:
         image = image[:, :, 0]
     elif image.ndim > 3:

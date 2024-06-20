@@ -7,6 +7,8 @@ import base64
 from PIL import Image
 import io
 from model_handler import ModelHandler
+import numpy as np
+
 
 def init_context(context):
     context.logger.info("Init context...  0%")
@@ -19,6 +21,11 @@ def handler(context, event):
     data = event.body
     buf = io.BytesIO(base64.b64decode(data["image"]))
     image = Image.open(buf)
+    if (image.mode == "I;16") | (image.mode == "I;16B") | (image.mode == "I;16L"):
+        image = np.array(image)
+        image = image - image.min()
+        image = image / image.max() * 255
+        image = Image.fromarray(image.astype(np.uint8))
     image = image.convert("RGB")  #  to make sure image comes in RGB
     features = context.user_data.model.handle(image)
 

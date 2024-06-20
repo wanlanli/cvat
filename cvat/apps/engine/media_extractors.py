@@ -609,9 +609,14 @@ class IChunkWriter(ABC):
         if image.mode == "I":
             # Image mode is 32bit integer pixels.
             # Autoscale pixels by factor 2**8 / im_data.max() to fit into 8bit
-            im_data = np.array(image)
-            im_data = im_data * (2**8 / im_data.max())
-            image = Image.fromarray(im_data.astype(np.int32))
+            # im_data = np.array(image)
+            # im_data = im_data * (2**8 / im_data.max())
+            # image = Image.fromarray(im_data.astype(np.int32))
+            image = np.array(image)
+            image = image - image.min()              # In case the used range lies in [a, 2^16] with a > 0
+            image = image / image.max() * 255        # Downscale into real numbers of range [0, 255]
+            image = image.astype(np.uint8)           # Floor to integers of range [0, 255]
+            image = Image.fromarray(image, mode="L")
 
         # TODO - Check if the other formats work. I'm only interested in I;16 for now. Sorry @:-|
         # Summary:
