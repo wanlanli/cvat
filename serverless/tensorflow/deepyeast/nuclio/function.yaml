@@ -17,8 +17,9 @@ metadata:
 spec:
   description: Deepyeast from Tensorflow Object Detection API
   runtime: 'python:3.9'
+  timeoutSeconds: 120s
   handler: main:handler
-  eventTimeout: 30s
+  eventTimeout: 300s
 
   build:
     image: cvat.tf.yeast2_inception_v1
@@ -30,7 +31,7 @@ spec:
           value: apt-get update && apt-get -y install curl git
         - kind: WORKDIR
           value: /opt/nuclio
-      
+
       postCopy:
         - kind: RUN
           value: git clone https://github.com/wanlanli/deepYeast
@@ -47,9 +48,9 @@ spec:
     myHttpTrigger:
       maxWorkers: 2
       kind: 'http'
-      workerAvailabilityTimeoutMilliseconds: 10000
+      workerAvailabilityTimeoutMilliseconds: 100000
       attributes:
-        maxRequestBodySize: 33554432 # 32MB
+        maxRequestBodySize: 335544320 # 320MB
 
   platform:
     attributes:
