@@ -19,6 +19,7 @@ from skimage.measure import find_contours, approximate_polygon
 
 # scp -r wlli@10.195.59.130:/home/wlli/Data/oneformer_mdel/model_0059999.pth .
 threshold = 0.5
+area_threshold = 500
 YEAST_CATEGORIES = [
     {"color": [0, 0, 0], "isthing": 0, "id": 0, "trainId": 0, "name": "background"},
     {"color": [253, 27, 27], "isthing": 1, "id": 1, "trainId": 1, "name": "cell"},
@@ -93,6 +94,10 @@ def handler(context, event):
             if box[0,:].any() or box[-1, :].any():
                 continue
             if box[:, 0].any() or box[:, -1].any():
+                continue
+            area = pred_masks.sum()
+            print(area)
+            if area < area_threshold:
                 continue
             polygon = to_cvat_polygon(np.array(box))
             if polygon is not None:

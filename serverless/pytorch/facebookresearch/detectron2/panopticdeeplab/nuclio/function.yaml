@@ -21,9 +21,9 @@ spec:
   runtime: 'python:3.8'
   handler: main:handler
   runtimeAttributes:
-    timeoutSeconds: 120  # Set function execution timeout to 120 seconds
-  timeoutSeconds: 120s
-  maxExecutionTimeout: 120s
+    timeoutSeconds: 600  # Set function execution timeout to seconds
+  timeoutSeconds: 600s
+  maxExecutionTimeout: 600s
   eventTimeout: 600s
   readinessTimeoutSeconds: 600
 

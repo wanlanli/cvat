@@ -324,7 +324,7 @@ NUCLIO = {
     'SCHEME': os.getenv('CVAT_NUCLIO_SCHEME', 'http'),
     'HOST': os.getenv('CVAT_NUCLIO_HOST', 'localhost'),
     'PORT': int(os.getenv('CVAT_NUCLIO_PORT', 8070)),
-    'DEFAULT_TIMEOUT': int(os.getenv('CVAT_NUCLIO_DEFAULT_TIMEOUT', 120)),
+    'DEFAULT_TIMEOUT': int(os.getenv('CVAT_NUCLIO_DEFAULT_TIMEOUT', 600)),
     'FUNCTION_NAMESPACE': os.getenv('CVAT_NUCLIO_FUNCTION_NAMESPACE', 'nuclio'),
     'INVOKE_METHOD': os.getenv('CVAT_NUCLIO_INVOKE_METHOD',
         default='dashboard' if 'KUBERNETES_SERVICE_HOST' in os.environ else 'direct'),

@@ -17,9 +17,13 @@ metadata:
 spec:
   description: Deepyeast from Tensorflow Object Detection API
   runtime: 'python:3.9'
-  timeoutSeconds: 120s
+  timeoutSeconds: 600s
   handler: main:handler
-  eventTimeout: 300s
+  runtimeAttributes:
+    timeoutSeconds: 600  # Set function execution timeout to seconds
+  maxExecutionTimeout: 600s
+  eventTimeout: 600s
+  readinessTimeoutSeconds: 600
 
   build:
     image: cvat.tf.yeast2_inception_v1
@@ -50,6 +54,7 @@ spec:
       kind: 'http'
       workerAvailabilityTimeoutMilliseconds: 100000
       attributes:
+        timeoutSeconds: 600
         maxRequestBodySize: 335544320 # 320MB
 
   platform:
