@@ -1,21 +1,21 @@
 // Copyright (C) 2022 Intel Corporation
-// Copyright (C) 2022-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import './styles.scss';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useHistory } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
 import Spin from 'antd/lib/spin';
 import { Col, Row } from 'antd/lib/grid';
 import Pagination from 'antd/lib/pagination';
 
-import { Job } from 'cvat-core-wrapper';
 import { updateHistoryFromQuery } from 'components/resource-sorting-filtering';
-import { CombinedState, Indexable, JobsQuery } from 'reducers';
-import { getJobsAsync, updateJobAsync } from 'actions/jobs-actions';
+import { CombinedState, JobsQuery } from 'reducers';
+import { getJobsAsync } from 'actions/jobs-actions';
 import { anySearch } from 'utils/any-search';
+import { useResourceQuery } from 'utils/hooks';
 
 import TopBarComponent from './top-bar';
 import JobsContentComponent from './jobs-content';
@@ -28,18 +28,8 @@ function JobsPageComponent(): JSX.Element {
     const query = useSelector((state: CombinedState) => state.jobs.query);
     const fetching = useSelector((state: CombinedState) => state.jobs.fetching);
     const count = useSelector((state: CombinedState) => state.jobs.count);
-    const onJobUpdate = useCallback((job: Job) => {
-        dispatch(updateJobAsync(job));
-    }, []);
 
-    const queryParams = new URLSearchParams(history.location.search);
-    const updatedQuery = { ...query };
-    for (const key of Object.keys(updatedQuery)) {
-        (updatedQuery as Indexable)[key] = queryParams.get(key) || null;
-        if (key === 'page') {
-            updatedQuery.page = updatedQuery.page ? +updatedQuery.page : 1;
-        }
-    }
+    const updatedQuery = useResourceQuery<JobsQuery>(query, { pageSize: 12 });
 
     useEffect(() => {
         dispatch(getJobsAsync({ ...updatedQuery }));
@@ -58,22 +48,24 @@ function JobsPageComponent(): JSX.Element {
 
     const content = count ? (
         <>
-            <JobsContentComponent onJobUpdate={onJobUpdate} />
-            <Row justify='space-around' about='middle'>
+            <JobsContentComponent />
+            <Row justify='space-around' about='middle' className='cvat-resource-pagination-wrapper'>
                 <Col md={22} lg={18} xl={16} xxl={16}>
                     <Pagination
                         className='cvat-jobs-page-pagination'
-                        onChange={(page: number) => {
+                        onChange={(page: number, pageSize: number) => {
                             dispatch(getJobsAsync({
                                 ...query,
                                 page,
+                                pageSize,
                             }));
                         }}
-                        showSizeChanger={false}
                         total={count}
-                        pageSize={12}
+                        pageSizeOptions={[12, 24, 48, 96]}
                         current={query.page}
+                        pageSize={query.pageSize}
                         showQuickJumper
+                        showSizeChanger
                     />
                 </Col>
             </Row>

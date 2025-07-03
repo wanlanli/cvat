@@ -1,17 +1,16 @@
 // Copyright (C) 2019-2022 Intel Corporation
-// Copyright (C) 2022-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import './styles.scss';
 import React, { useEffect, useRef, useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector, useDispatch, shallowEqual } from 'react-redux';
 import { useHistory, useParams } from 'react-router';
 import Spin from 'antd/lib/spin';
 import { Row, Col } from 'antd/lib/grid';
-import Result from 'antd/lib/result';
 import Button from 'antd/lib/button';
-import Dropdown from 'antd/lib/dropdown';
+import Popover from 'antd/lib/popover';
 import Title from 'antd/lib/typography/Title';
 import Pagination from 'antd/lib/pagination';
 import { MultiPlusIcon } from 'icons';
@@ -21,18 +20,19 @@ import Input from 'antd/lib/input';
 import notification from 'antd/lib/notification';
 
 import { getCore, Project, Task } from 'cvat-core-wrapper';
-import { CombinedState, Indexable } from 'reducers';
-import { getProjectTasksAsync } from 'actions/projects-actions';
-import { cancelInferenceAsync } from 'actions/models-actions';
+import { CombinedState, TasksQuery } from 'reducers';
+import { getProjectTasksAsync, updateProjectAsync } from 'actions/projects-actions';
 import CVATLoadingSpinner from 'components/common/loading-spinner';
-import TaskItem from 'components/tasks-page/task-item';
+import TaskItem from 'containers/tasks-page/task-item';
 import MoveTaskModal from 'components/move-task-modal/move-task-modal';
 import ModelRunnerDialog from 'components/model-runner-modal/model-runner-dialog';
 import {
     SortingComponent, ResourceFilterHOC, defaultVisibility, updateHistoryFromQuery,
 } from 'components/resource-sorting-filtering';
 import CvatDropdownMenuPaper from 'components/common/cvat-dropdown-menu-paper';
+import { ProjectNotFoundComponent } from 'components/common/not-found';
 
+import { useResourceQuery } from 'utils/hooks';
 import DetailsComponent from './details';
 import ProjectTopBar from './top-bar';
 
@@ -57,27 +57,28 @@ export default function ProjectPageComponent(): JSX.Element {
 
     const [projectInstance, setProjectInstance] = useState<Project | null>(null);
     const [fechingProject, setFetchingProject] = useState(true);
-    const [updatingProject, setUpdatingProject] = useState(false);
     const mounted = useRef(false);
 
-    const ribbonPlugins = useSelector((state: CombinedState) => state.plugins.components.taskItem.ribbon);
-    const deletes = useSelector((state: CombinedState) => state.projects.activities.deletes);
-    const taskDeletes = useSelector((state: CombinedState) => state.tasks.activities.deletes);
-    const tasksActiveInferences = useSelector((state: CombinedState) => state.models.inferences);
-    const tasks = useSelector((state: CombinedState) => state.tasks.current);
-    const tasksCount = useSelector((state: CombinedState) => state.tasks.count);
-    const tasksQuery = useSelector((state: CombinedState) => state.projects.tasksGettingQuery);
-    const tasksFetching = useSelector((state: CombinedState) => state.tasks.fetching);
+    const {
+        deletes,
+        updates,
+        tasks,
+        tasksCount,
+        tasksQuery,
+        tasksFetching,
+    } = useSelector((state: CombinedState) => ({
+        deletes: state.projects.activities.deletes,
+        updates: state.projects.activities.updates,
+        tasks: state.tasks.current,
+        tasksCount: state.tasks.count,
+        tasksQuery: state.projects.tasksGettingQuery,
+        tasksFetching: state.tasks.fetching,
+    }), shallowEqual);
     const [visibility, setVisibility] = useState(defaultVisibility);
 
-    const queryParams = new URLSearchParams(history.location.search);
-    const updatedQuery = { ...tasksQuery };
-    for (const key of Object.keys(updatedQuery)) {
-        (updatedQuery as Indexable)[key] = queryParams.get(key) || null;
-        if (key === 'page') {
-            updatedQuery.page = updatedQuery.page ? +updatedQuery.page : 1;
-        }
-    }
+    const updatedQuery = useResourceQuery<TasksQuery>(tasksQuery);
+
+    const isProjectUpdating = updates[id];
 
     useEffect(() => {
         if (Number.isInteger(id)) {
@@ -120,24 +121,17 @@ export default function ProjectPageComponent(): JSX.Element {
     }, [tasksQuery]);
 
     useEffect(() => {
-        if (projectInstance && id in deletes && deletes[id]) {
+        if (deletes[id]) {
             history.push('/projects');
         }
     }, [deletes]);
 
-    if (fechingProject) {
+    if (fechingProject || id in deletes) {
         return <Spin size='large' className='cvat-spinner' />;
     }
 
     if (!projectInstance) {
-        return (
-            <Result
-                className='cvat-not-found'
-                status='404'
-                title='There was something wrong during getting the project'
-                subTitle='Please, be sure, that information you tried to get exist and you are eligible to access it'
-            />
-        );
+        return <ProjectNotFoundComponent />;
     }
 
     const subsets = Array.from(
@@ -153,14 +147,8 @@ export default function ProjectPageComponent(): JSX.Element {
                         .map((task: Task) => (
                             <TaskItem
                                 key={task.id}
-                                ribbonPlugins={ribbonPlugins}
-                                deleted={task.id in taskDeletes ? taskDeletes[task.id] : false}
-                                hidden={false}
-                                activeInference={tasksActiveInferences[task.id] || null}
-                                cancelAutoAnnotation={() => {
-                                    dispatch(cancelInferenceAsync(task.id));
-                                }}
-                                taskInstance={task}
+                                taskID={task.id}
+                                idx={tasks.indexOf(task)}
                             />
                         ))}
                 </React.Fragment>
@@ -169,18 +157,19 @@ export default function ProjectPageComponent(): JSX.Element {
                 <Col md={22} lg={18} xl={16} xxl={14}>
                     <Pagination
                         className='cvat-project-tasks-pagination'
-                        onChange={(page: number) => {
+                        onChange={(page: number, pageSize: number) => {
                             dispatch(getProjectTasksAsync({
                                 ...tasksQuery,
                                 projectId: id,
                                 page,
+                                pageSize,
                             }));
                         }}
-                        showSizeChanger={false}
                         total={tasksCount}
-                        pageSize={10}
+                        pageSize={tasksQuery.pageSize}
                         current={tasksQuery.page}
                         showQuickJumper
+                        showSizeChanger
                     />
                 </Col>
             </Row>
@@ -191,13 +180,13 @@ export default function ProjectPageComponent(): JSX.Element {
 
     return (
         <Row justify='center' align='top' className='cvat-project-page'>
-            { updatingProject ? <CVATLoadingSpinner size='large' /> : null }
+            { isProjectUpdating ? <CVATLoadingSpinner size='large' /> : null }
             <Col
                 md={22}
                 lg={18}
                 xl={16}
                 xxl={14}
-                style={updatingProject ? {
+                style={isProjectUpdating ? {
                     pointerEvents: 'none',
                     opacity: 0.7,
                 } : {}}
@@ -205,23 +194,8 @@ export default function ProjectPageComponent(): JSX.Element {
                 <ProjectTopBar projectInstance={projectInstance} />
                 <DetailsComponent
                     onUpdateProject={(project: Project) => {
-                        setUpdatingProject(true);
-                        project.save().then((updatedProject: Project) => {
-                            if (mounted.current) {
-                                dispatch(getProjectTasksAsync({ ...updatedQuery, projectId: id }));
-                                setProjectInstance(updatedProject);
-                            }
-                        }).catch((error: Error) => {
-                            if (mounted.current) {
-                                notification.error({
-                                    message: 'Could not update the project',
-                                    description: error.toString(),
-                                });
-                            }
-                        }).finally(() => {
-                            if (mounted.current) {
-                                setUpdatingProject(false);
-                            }
+                        dispatch(updateProjectAsync(project)).then((updatedProject: Project) => {
+                            setProjectInstance(updatedProject);
                         });
                     }}
                     project={projectInstance}
@@ -239,7 +213,7 @@ export default function ProjectPageComponent(): JSX.Element {
                                         search: _search,
                                     }));
                                 }}
-                                defaultValue={tasksQuery.search || ''}
+                                defaultValue={tasksQuery.search ?? ''}
                                 className='cvat-project-page-tasks-search-bar'
                                 placeholder='Search ...'
                             />
@@ -288,37 +262,38 @@ export default function ProjectPageComponent(): JSX.Element {
                                     }}
                                 />
                             </div>
-                            <Dropdown
-                                trigger={['click']}
-                                destroyPopupOnHide
-                                overlay={(
-                                    <CvatDropdownMenuPaper>
-                                        <Button
-                                            type='primary'
-                                            icon={<PlusOutlined />}
-                                            className='cvat-create-task-button'
-                                            onClick={() => history.push(`/tasks/create?projectId=${id}`)}
-                                        >
-                                            Create a new task
-                                        </Button>
-                                        <Button
-                                            type='primary'
-                                            icon={<span className='anticon'><MultiPlusIcon /></span>}
-                                            className='cvat-create-multi-tasks-button'
-                                            onClick={() => history.push(`/tasks/create?projectId=${id}&many=true`)}
-                                        >
-                                            Create multi tasks
-                                        </Button>
-                                    </CvatDropdownMenuPaper>
-                                )}
-                            >
-                                <Button
-                                    type='primary'
-                                    className='cvat-create-task-dropdown'
-                                    icon={<PlusOutlined />}
-                                />
-                            </Dropdown>
                         </div>
+                        <Popover
+                            trigger={['click']}
+                            destroyTooltipOnHide
+                            overlayInnerStyle={{ padding: 0 }}
+                            content={(
+                                <CvatDropdownMenuPaper>
+                                    <Button
+                                        type='primary'
+                                        icon={<PlusOutlined />}
+                                        className='cvat-create-task-button'
+                                        onClick={() => history.push(`/tasks/create?projectId=${id}`)}
+                                    >
+                                        Create a new task
+                                    </Button>
+                                    <Button
+                                        type='primary'
+                                        icon={<span className='anticon'><MultiPlusIcon /></span>}
+                                        className='cvat-create-multi-tasks-button'
+                                        onClick={() => history.push(`/tasks/create?projectId=${id}&many=true`)}
+                                    >
+                                        Create multi tasks
+                                    </Button>
+                                </CvatDropdownMenuPaper>
+                            )}
+                        >
+                            <Button
+                                type='primary'
+                                className='cvat-create-task-dropdown'
+                                icon={<PlusOutlined />}
+                            />
+                        </Popover>
                     </Col>
                 </Row>
                 { tasksFetching ? (

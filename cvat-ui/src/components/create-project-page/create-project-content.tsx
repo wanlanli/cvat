@@ -1,5 +1,5 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2022-2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -15,9 +15,8 @@ import Collapse from 'antd/lib/collapse';
 import Button from 'antd/lib/button';
 import Input from 'antd/lib/input';
 import notification from 'antd/lib/notification';
-import { StorageLocation } from 'reducers';
 import { createProjectAsync } from 'actions/projects-actions';
-import { Storage, StorageData } from 'cvat-core-wrapper';
+import { Storage, StorageData, StorageLocation } from 'cvat-core-wrapper';
 import patterns from 'utils/validation-patterns';
 import LabelsEditor from 'components/labels-editor/labels-editor';
 import SourceStorageField from 'components/storage/source-storage-field';
@@ -212,20 +211,29 @@ export default function CreateProjectContent(): JSX.Element {
                 />
             </Col>
             <Col span={24}>
-                <Collapse className='cvat-advanced-configuration-wrapper'>
-                    <Collapse.Panel key='1' header={<Text className='cvat-title'>Advanced configuration</Text>}>
-                        <AdvancedConfigurationForm
-                            formRef={advancedFormRef}
-                            sourceStorageLocation={sourceStorageLocation}
-                            targetStorageLocation={targetStorageLocation}
-                            onChangeSourceStorageLocation={(value: StorageLocation) => setSourceStorageLocation(value)}
-                            onChangeTargetStorageLocation={(value: StorageLocation) => setTargetStorageLocation(value)}
-                        />
-                    </Collapse.Panel>
-                </Collapse>
+                <Collapse
+                    className='cvat-advanced-configuration-wrapper'
+                    items={[{
+                        key: '1',
+                        label: <Text className='cvat-title'>Advanced configuration</Text>,
+                        children: (
+                            <AdvancedConfigurationForm
+                                formRef={advancedFormRef}
+                                sourceStorageLocation={sourceStorageLocation}
+                                targetStorageLocation={targetStorageLocation}
+                                onChangeSourceStorageLocation={
+                                    (value: StorageLocation) => setSourceStorageLocation(value)
+                                }
+                                onChangeTargetStorageLocation={
+                                    (value: StorageLocation) => setTargetStorageLocation(value)
+                                }
+                            />
+                        ),
+                    }]}
+                />
             </Col>
             <Col span={24}>
-                <Row justify='end' gutter={5}>
+                <Row justify='end' gutter={8}>
                     <Col>
                         <Button className='cvat-submit-open-project-button' type='primary' onClick={onSubmitAndOpen}>
                             Submit & Open

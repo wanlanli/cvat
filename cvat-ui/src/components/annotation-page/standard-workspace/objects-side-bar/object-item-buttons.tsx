@@ -1,5 +1,5 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -20,7 +20,7 @@ import Icon, {
 } from '@ant-design/icons';
 
 import CVATTooltip from 'components/common/cvat-tooltip';
-import { ObjectType, ShapeType } from 'reducers';
+import { ObjectType, ShapeType } from 'cvat-core-wrapper';
 import {
     ObjectOutsideIcon, FirstIcon, LastIcon, PreviousIcon, NextIcon,
 } from 'icons';

@@ -1,8 +1,10 @@
-// Copyright (C) 2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
-import { ModelKind, ModelReturnType, ShapeType } from './enums';
+import {
+    LabelType, ModelKind, RQStatus, ShapeType,
+} from './enums';
 
 export interface ModelAttribute {
     name: string;
@@ -15,7 +17,7 @@ export interface ModelParams {
         minPosVertices?: number;
         minNegVertices?: number;
         startWithBox?: boolean;
-        onChangeToolsBlockerState?: (event: string) => void;
+        startWithBoxOptional?: boolean;
     };
 }
 
@@ -26,7 +28,7 @@ export interface MLModelTip {
 
 export interface MLModelLabel {
     name: string;
-    type: ShapeType | 'unknown';
+    type: LabelType;
     attributes: ModelAttribute[];
     sublabels?: MLModelLabel[];
     svg?: string,
@@ -36,12 +38,11 @@ export interface SerializedModel {
     id?: string | number;
     name?: string;
     labels_v2?: MLModelLabel[];
+    supported_shape_types?: ShapeType[];
     version?: number;
-    framework?: string;
     description?: string;
     kind?: ModelKind;
     type?: string;
-    return_type?: ModelReturnType;
     owner?: any;
     provider?: string;
     url?: string;
@@ -50,8 +51,15 @@ export interface SerializedModel {
     min_pos_points?: number;
     min_neg_points?: number;
     startswith_box?: boolean;
+    startswith_box_optional?: boolean;
     created_date?: string;
     updated_date?: string;
+}
+
+export interface UpdateStatusData {
+    status: RQStatus;
+    progress: number;
+    message: string;
 }
 
 export type PaginatedResource<T> = T[] & { count: number };

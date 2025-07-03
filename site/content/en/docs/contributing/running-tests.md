@@ -50,9 +50,7 @@ yarn run cypress:run:chrome:canvas3d
    `cvat-sdk` and `cvat-cli` source code
 1. Install all necessary requirements before running REST API tests:
    ```
-   pip install -r ./tests/python/requirements.txt
-   pip install -e ./cvat-sdk
-   pip install -e ./cvat-cli
+   pip install -e ./cvat-sdk -e ./cvat-cli -r ./tests/python/requirements.txt
    ```
 1. Stop any other CVAT containers which you run previously. They keep ports
 which are used by containers for the testing system.
@@ -106,7 +104,7 @@ To attach to a container, run one of the following tasks:
 - `REST API tests: Attach to RQ low` for the low priority queue worker
 - `REST API tests: Attach to RQ default` for the default priority queue worker
 
-> If you have a custom development environment setup, you need to adjust
+If you have a custom development environment setup, you need to adjust
 host-remote path mappings in the `.vscode/launch.json`:
 ```json
 ...
@@ -132,16 +130,17 @@ Extra options:
   variables in the `docker-compose.dev.yml`
 
 
-# Unit tests
+# Server unit tests
 
 **Initial steps**
+1. If you run unit tests on Linux, ensure that `poppler-utils` and `unrar` are installed on your system:
+   ```
+   sudo apt-get update
+   sudo apt-get install -y poppler-utils unrar
+   ```
 1. Install necessary Python dependencies:
    ```
    pip install -r cvat/requirements/testing.txt
-   ```
-1. Install npm dependencies:
-   ```
-   yarn --frozen-lockfile
    ```
 1. Build CVAT server image
    ```
@@ -163,13 +162,7 @@ If you want to get a code coverage report, run the next command:
    coverage run manage.py test --settings cvat.settings.testing cvat/apps -v 2
    ```
 
-1. JS tests
-   ```
-   cd cvat-core
-   yarn run test
-   ```
-
-**Debug python unit tests**
+**Debugging**
 1. Run `server: tests` debug task in VSCode
 1. If you want to debug particular tests then change the configuration
 of the corresponding task in `./vscode/launch.json`, for example:

@@ -1,18 +1,16 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import { AnyAction } from 'redux';
 
-import { BoundariesActionTypes } from 'actions/boundaries-actions';
 import { AuthActionTypes } from 'actions/auth-actions';
 import { SettingsActionTypes } from 'actions/settings-actions';
 import { AnnotationActionTypes } from 'actions/annotation-actions';
 import {
     SettingsState, GridColor, FrameSpeed, ColorBy,
 } from 'reducers';
-import { clampOpacity } from 'utils/clamp-opacity';
 
 const defaultState: SettingsState = {
     shapes: {
@@ -24,12 +22,18 @@ const defaultState: SettingsState = {
         showBitmap: false,
         showProjections: false,
         showGroundTruth: false,
+        orientationVisibility: {
+            x: false,
+            y: false,
+            z: false,
+        },
     },
     workspace: {
         autoSave: false,
         autoSaveInterval: 15 * 60 * 1000,
         aamZoomMargin: 100,
         automaticBordering: false,
+        adaptiveZoom: true,
         showObjectsTextAlways: false,
         showAllInterpolationTracks: false,
         intelligentPolygonCrop: true,
@@ -37,7 +41,7 @@ const defaultState: SettingsState = {
         textFontSize: 14,
         controlPointsSize: 5,
         textPosition: 'auto',
-        textContent: 'id,source,label,attributes,descriptions',
+        textContent: 'id,source,label,attributes,descriptions,dimensions',
         toolsBlockerState: {
             algorithmsLocked: false,
             buttonVisible: false,
@@ -163,6 +167,18 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 shapes: {
                     ...state.shapes,
                     showProjections: action.payload.showProjections,
+                },
+            };
+        }
+        case SettingsActionTypes.CHANGE_SHAPES_ORIENTATION_VISIBILITY: {
+            return {
+                ...state,
+                shapes: {
+                    ...state.shapes,
+                    orientationVisibility: {
+                        ...state.shapes.orientationVisibility,
+                        ...action.payload.orientationVisibility,
+                    },
                 },
             };
         }
@@ -329,6 +345,15 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 },
             };
         }
+        case SettingsActionTypes.SWITCH_ADAPTIVE_ZOOM: {
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    adaptiveZoom: action.payload.adaptiveZoom,
+                },
+            };
+        }
         case SettingsActionTypes.SWITCH_INTELLIGENT_POLYGON_CROP: {
             return {
                 ...state,
@@ -438,39 +463,19 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 imageFilters: [],
             };
         }
-        case AnnotationActionTypes.FETCH_ANNOTATIONS_SUCCESS:
-        case AnnotationActionTypes.CHANGE_FRAME_SUCCESS: {
-            const { states } = action.payload;
-            const { shapes } = state;
-            const [clampedOpacity, clampedSelectedOpacity] = clampOpacity(states, shapes);
-            return {
-                ...state,
-                shapes: {
-                    ...state.shapes,
-                    opacity: clampedOpacity,
-                    selectedOpacity: clampedSelectedOpacity,
-                },
-            };
-        }
-        case BoundariesActionTypes.RESET_AFTER_ERROR:
         case AnnotationActionTypes.GET_JOB_SUCCESS: {
-            const { job, states } = action.payload;
-            const { shapes } = state;
             const filters = [...state.imageFilters];
             filters.forEach((imageFilter) => {
                 imageFilter.modifier.currentProcessedImage = null;
             });
 
-            const [clampedOpacity, clampedSelectedOpacity] = clampOpacity(states, shapes, job);
-
             return {
                 ...state,
-                shapes: {
-                    ...defaultState.shapes,
-                    opacity: clampedOpacity,
-                    selectedOpacity: clampedSelectedOpacity,
-                },
                 imageFilters: filters,
+                shapes: {
+                    ...state.shapes,
+                    showGroundTruth: false,
+                },
             };
         }
         case AnnotationActionTypes.INTERACT_WITH_CANVAS: {

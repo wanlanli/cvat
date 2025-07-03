@@ -1,5 +1,5 @@
 // Copyright (C) 2021-2022 Intel Corporation
-// Copyright (C) 2022-2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -26,16 +26,88 @@ import {
 } from 'actions/annotation-actions';
 import {
     ActiveControl,
-    ColorBy, CombinedState, ContextMenuType, ObjectType, Workspace,
+    ColorBy, CombinedState, ContextMenuType, Workspace,
 } from 'reducers';
-import { CameraAction, Canvas3d, ViewsDOM } from 'cvat-canvas3d-wrapper';
+import {
+    OrientationVisibility, CameraAction, Canvas3d, ViewsDOM,
+} from 'cvat-canvas3d-wrapper';
 
 import CVATTooltip from 'components/common/cvat-tooltip';
 import { EventScope } from 'cvat-logger';
-import { getCore, ObjectState, Job } from 'cvat-core-wrapper';
+import {
+    getCore, ObjectState, ObjectType, Job,
+} from 'cvat-core-wrapper';
 import GlobalHotKeys from 'utils/mousetrap-react';
+import { ShortcutScope } from 'utils/enums';
+import { registerComponentShortcuts } from 'actions/shortcuts-actions';
+import { subKeyMap } from 'utils/component-subkeymap';
 
 const cvat = getCore();
+
+const componentShortcuts = {
+    TILT_UP: {
+        name: 'Camera Roll Angle Up',
+        description: 'Increases camera roll angle',
+        sequences: ['shift+up'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    TILT_DOWN: {
+        name: 'Camera Roll Angle Down',
+        description: 'Decreases camera roll angle',
+        sequences: ['shift+down'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    ROTATE_LEFT: {
+        name: 'Camera Pitch Angle Left',
+        description: 'Decreases camera pitch angle',
+        sequences: ['shift+left'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    ROTATE_RIGHT: {
+        name: 'Camera Pitch Angle Right',
+        description: 'Increases camera pitch angle',
+        sequences: ['shift+right'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    MOVE_UP: {
+        name: 'Camera Move Up',
+        description: 'Move the camera up',
+        sequences: ['alt+u'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    MOVE_DOWN: {
+        name: 'Camera Move Down',
+        description: 'Move the camera down',
+        sequences: ['alt+o'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    MOVE_LEFT: {
+        name: 'Camera Move Left',
+        description: 'Move the camera left',
+        sequences: ['alt+j'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    MOVE_RIGHT: {
+        name: 'Camera Move Right',
+        description: 'Move the camera right',
+        sequences: ['alt+l'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    ZOOM_IN: {
+        name: 'Camera Zoom In',
+        description: 'Performs zoom in',
+        sequences: ['alt+i'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+    ZOOM_OUT: {
+        name: 'Camera Zoom Out',
+        description: 'Performs zoom out',
+        sequences: ['alt+k'],
+        scope: ShortcutScope['3D_ANNOTATION_WORKSPACE'],
+    },
+};
+
+registerComponentShortcuts(componentShortcuts);
 
 interface StateToProps {
     opacity: number;
@@ -43,6 +115,7 @@ interface StateToProps {
     outlined: boolean;
     outlineColor: string;
     colorBy: ColorBy;
+    orientationVisibility: OrientationVisibility;
     frameFetching: boolean;
     canvasInstance: Canvas3d;
     jobInstance: Job;
@@ -93,14 +166,14 @@ function mapStateToProps(state: CombinedState): StateToProps {
                 resetZoom,
             },
             shapes: {
-                opacity, colorBy, selectedOpacity, outlined, outlineColor,
+                opacity, colorBy, selectedOpacity, outlined, outlineColor, orientationVisibility,
             },
         },
     } = state;
 
     return {
         canvasInstance: canvasInstance as Canvas3d,
-        jobInstance,
+        jobInstance: jobInstance as Job,
         frameData,
         contextMenuVisibility,
         annotations,
@@ -111,6 +184,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
         selectedOpacity,
         outlined,
         outlineColor,
+        orientationVisibility,
         activeLabelID,
         activatedStateID,
         activeObjectType,
@@ -183,20 +257,7 @@ export const PerspectiveViewComponent = React.memo(
             canvas.keyControls(new KeyboardEvent('keydown', { code, altKey, shiftKey }));
         };
 
-        const subKeyMap = {
-            TILT_UP: keyMap.TILT_UP,
-            TILT_DOWN: keyMap.TILT_DOWN,
-            ROTATE_LEFT: keyMap.ROTATE_LEFT,
-            ROTATE_RIGHT: keyMap.ROTATE_RIGHT,
-            MOVE_UP: keyMap.MOVE_UP,
-            MOVE_DOWN: keyMap.MOVE_DOWN,
-            MOVE_LEFT: keyMap.MOVE_LEFT,
-            MOVE_RIGHT: keyMap.MOVE_RIGHT,
-            ZOOM_IN: keyMap.ZOOM_IN,
-            ZOOM_OUT: keyMap.ZOOM_OUT,
-        };
-
-        const handlers = {
+        const handlers: Record<keyof typeof componentShortcuts, (event?: KeyboardEvent) => void> = {
             TILT_UP: () => {}, // Handled by CVAT 3D Independently
             TILT_DOWN: () => {},
             ROTATE_LEFT: () => {},
@@ -331,7 +392,7 @@ export const PerspectiveViewComponent = React.memo(
                     className='cvat-canvas-container cvat-canvas-container-overflow'
                     ref={ref}
                 />
-                <GlobalHotKeys handlers={handlers} keyMap={subKeyMap} />
+                <GlobalHotKeys handlers={handlers} keyMap={subKeyMap(componentShortcuts, keyMap)} />
                 <ArrowGroup />
                 <ControlGroup />
             </div>
@@ -421,6 +482,7 @@ const Canvas3DWrapperComponent = React.memo((props: Props): null => {
         opacity,
         outlined,
         outlineColor,
+        orientationVisibility,
         selectedOpacity,
         colorBy,
         contextMenuVisibility,
@@ -577,12 +639,13 @@ const Canvas3DWrapperComponent = React.memo((props: Props): null => {
     }, [resetZoom]);
 
     const updateShapesView = (): void => {
-        (canvasInstance as Canvas3d).configureShapes({
+        canvasInstance.configureShapes({
             opacity,
             outlined,
             outlineColor,
             selectedOpacity,
             colorBy,
+            orientationVisibility,
         });
     };
 
@@ -615,7 +678,7 @@ const Canvas3DWrapperComponent = React.memo((props: Props): null => {
 
     useEffect(() => {
         updateShapesView();
-    }, [opacity, outlined, outlineColor, selectedOpacity, colorBy]);
+    }, [opacity, outlined, outlineColor, selectedOpacity, colorBy, orientationVisibility]);
 
     useEffect(() => {
         const canvasInstanceDOM = canvasInstance.html() as ViewsDOM;

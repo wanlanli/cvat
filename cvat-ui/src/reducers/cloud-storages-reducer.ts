@@ -1,5 +1,5 @@
 // Copyright (C) 2021-2022 Intel Corporation
-// Copyright (C) 2022 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -16,6 +16,7 @@ const defaultState: CloudStoragesState = {
     previews: {},
     gettingQuery: {
         page: 1,
+        pageSize: 12,
         id: null,
         search: null,
         sort: null,

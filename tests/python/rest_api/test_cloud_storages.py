@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Intel Corporation
-# Copyright (C) 2022-2023 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -58,7 +58,6 @@ class TestGetCloudStorage:
         "group, is_owner, is_allow",
         [
             ("admin", False, True),
-            ("business", False, False),
             ("user", True, True),
         ],
     )
@@ -70,11 +69,7 @@ class TestGetCloudStorage:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in users
-                    if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
-                )
+                u for u in users if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -101,11 +96,9 @@ class TestGetCloudStorage:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in find_users(role=role, org=org_id)
-                    if u["id"] != cloud_storage["owner"]["id"]
-                )
+                u
+                for u in find_users(role=role, org=org_id)
+                if u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -149,7 +142,7 @@ class TestCloudStoragesListFilters(CollectionSimpleFilterTestBase):
         ("provider_type", "name", "resource", "credentials_type", "owner"),
     )
     def test_can_use_simple_filter_for_object_list(self, field):
-        return super().test_can_use_simple_filter_for_object_list(field)
+        return super()._test_can_use_simple_filter_for_object_list(field)
 
 
 @pytest.mark.usefixtures("restore_db_per_function")
@@ -302,7 +295,6 @@ class TestPatchCloudStorage:
         "group, is_owner, is_allow",
         [
             ("admin", False, True),
-            ("business", False, False),
             ("worker", True, True),
         ],
     )
@@ -314,11 +306,7 @@ class TestPatchCloudStorage:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in users
-                    if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
-                )
+                u for u in users if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -345,11 +333,9 @@ class TestPatchCloudStorage:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in find_users(role=role, org=org_id)
-                    if u["id"] != cloud_storage["owner"]["id"]
-                )
+                u
+                for u in find_users(role=role, org=org_id)
+                if u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -387,7 +373,6 @@ class TestGetCloudStoragePreview:
         "group, is_owner, is_allow",
         [
             ("admin", False, True),
-            ("business", False, False),
             ("user", True, True),
         ],
     )
@@ -399,11 +384,7 @@ class TestGetCloudStoragePreview:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in users
-                    if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
-                )
+                u for u in users if group in u["groups"] and u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -430,11 +411,9 @@ class TestGetCloudStoragePreview:
             cloud_storage["owner"]["username"]
             if is_owner
             else next(
-                (
-                    u
-                    for u in find_users(role=role, org=org_id)
-                    if u["id"] != cloud_storage["owner"]["id"]
-                )
+                u
+                for u in find_users(role=role, org=org_id)
+                if u["id"] != cloud_storage["owner"]["id"]
             )["username"]
         )
 
@@ -724,19 +703,17 @@ class TestGetCloudStorageContent:
         cloud_storages,
     ):
         initial_content = self._test_get_cloud_storage_content(cloud_storage_id)["content"]
-        s3_client = make_s3_client()
         cs_name = cloud_storages[cloud_storage_id]["resource"]
+        s3_client = make_s3_client(bucket=cs_name)
         new_directory = "manually_created_directory/"
 
         # directory is 0 size object that has a name ending with a forward slash
         s3_client.create_file(
-            bucket=cs_name,
             filename=new_directory,
         )
         request.addfinalizer(
             partial(
                 s3_client.remove_file,
-                bucket=cs_name,
                 filename=new_directory,
             )
         )

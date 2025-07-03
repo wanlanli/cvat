@@ -7,10 +7,12 @@ import { JobsActions, JobsActionTypes } from 'actions/jobs-actions';
 import { JobsState } from '.';
 
 const defaultState: JobsState = {
+    fetchingTimestamp: Date.now(),
     fetching: false,
     count: 0,
     query: {
         page: 1,
+        pageSize: 12,
         filter: null,
         sort: null,
         search: null,
@@ -27,6 +29,7 @@ export default (state: JobsState = defaultState, action: JobsActions): JobsState
         case JobsActionTypes.GET_JOBS: {
             return {
                 ...state,
+                fetchingTimestamp: action.payload.fetchingTimestamp,
                 fetching: true,
                 query: {
                     ...defaultState.query,

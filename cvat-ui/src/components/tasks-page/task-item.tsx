@@ -1,5 +1,5 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2022-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -9,21 +9,22 @@ import { withRouter } from 'react-router-dom';
 import Text from 'antd/lib/typography/Text';
 import { Row, Col } from 'antd/lib/grid';
 import Button from 'antd/lib/button';
-import { LoadingOutlined, MoreOutlined } from '@ant-design/icons';
-import Dropdown from 'antd/lib/dropdown';
+import { MoreOutlined } from '@ant-design/icons';
 import Progress from 'antd/lib/progress';
 import Badge from 'antd/lib/badge';
 import moment from 'moment';
-import { Task, RQStatus } from 'cvat-core-wrapper';
-import ActionsMenuContainer from 'containers/actions-menu/actions-menu';
+import { Task, RQStatus, Request } from 'cvat-core-wrapper';
 import Preview from 'components/common/preview';
 import { ActiveInference, PluginComponent } from 'reducers';
+import StatusMessage from 'components/requests-page/request-status';
 import AutomaticAnnotationProgress from './automatic-annotation-progress';
+import TaskActionsComponent from './actions-menu';
 
 export interface TaskItemProps {
     taskInstance: any;
     deleted: boolean;
     activeInference: ActiveInference | null;
+    activeRequest: Request | null;
     ribbonPlugins: PluginComponent[];
     cancelAutoAnnotation(): void;
     updateTaskInState(task: Task): void;
@@ -54,21 +55,34 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
     }
 
     public componentDidMount(): void {
-        const { taskInstance, updateTaskInState } = this.props;
+        const { taskInstance, updateTaskInState, activeRequest } = this.props;
         const { importingState } = this.state;
 
-        if (importingState !== null) {
-            taskInstance.listenToCreate((state: RQStatus, progress: number, message: string) => {
-                if (!this.#isUnmounted) {
-                    this.setState({
-                        importingState: {
-                            message,
-                            progress: Math.floor(progress * 100),
-                            state,
-                        },
-                    });
-                }
-            }).then((createdTask: Task) => {
+        if (importingState !== null && activeRequest !== null) {
+            if (!this.#isUnmounted) {
+                this.setState({
+                    importingState: {
+                        message: activeRequest.message,
+                        progress: Math.floor(activeRequest.progress * 100),
+                        state: activeRequest.status,
+                    },
+                });
+            }
+            taskInstance.listenToCreate(activeRequest.id, {
+                callback: (request: Request) => {
+                    if (!this.#isUnmounted) {
+                        this.setState({
+                            importingState: {
+                                message: request.message,
+                                progress: Math.floor(request.progress * 100),
+                                state: request.status,
+                            },
+                        });
+                    }
+                },
+                initialRequest: activeRequest,
+            },
+            ).then((createdTask: Task) => {
                 if (!this.#isUnmounted) {
                     this.setState({ importingState: null });
 
@@ -84,7 +98,7 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
                         }
                     }, 1000);
                 }
-            });
+            }).catch(() => {});
         }
     }
 
@@ -140,31 +154,22 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
         const { importingState } = this.state;
 
         if (importingState) {
-            let textType: 'success' | 'danger' = 'success';
-            if (!!importingState.state && [RQStatus.FAILED, RQStatus.UNKNOWN].includes(importingState.state)) {
-                textType = 'danger';
-            }
-
             return (
                 <Col span={7}>
                     <Row>
                         <Col span={24} className='cvat-task-item-progress-wrapper'>
                             <div>
-                                <Text
-                                    strong
-                                    type={[RQStatus.QUEUED, null].includes(importingState.state) ? undefined : textType}
-                                >
-                                    {`\u2022 ${importingState.message || importingState.state}`}
-                                    { !!importingState.state && [RQStatus.QUEUED, RQStatus.STARTED]
-                                        .includes(importingState.state) && <LoadingOutlined /> }
-                                </Text>
+                                <StatusMessage status={importingState.state} message={importingState.message} />
                             </div>
-                            <Progress
-                                percent={importingState.progress}
-                                strokeColor='#1890FF'
-                                strokeWidth={5}
-                                size='small'
-                            />
+                            {
+                                importingState.state !== RQStatus.FAILED ? (
+                                    <Progress
+                                        percent={importingState.progress}
+                                        strokeColor='#1890FF'
+                                        size='small'
+                                    />
+                                ) : null
+                            }
                         </Col>
                     </Row>
                 </Col>
@@ -212,7 +217,6 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
                             }}
                             strokeColor='#1890FF'
                             showInfo={false}
-                            strokeWidth={5}
                             size='small'
                         />
                     </Col>
@@ -229,10 +233,6 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
         const { importingState } = this.state;
         const { taskInstance, history } = this.props;
         const { id } = taskInstance;
-
-        const onViewAnalytics = (): void => {
-            history.push(`/tasks/${taskInstance.id}/analytics`);
-        };
 
         return (
             <Col span={3}>
@@ -255,21 +255,17 @@ class TaskItemComponent extends React.PureComponent<TaskItemProps & RouteCompone
                     </Col>
                 </Row>
                 <Row justify='end'>
-                    <Dropdown
-                        trigger={['click']}
-                        destroyPopupOnHide
-                        overlay={(
-                            <ActionsMenuContainer
-                                taskInstance={taskInstance}
-                                onViewAnalytics={onViewAnalytics}
-                            />
-                        )}
-                    >
-                        <Col className='cvat-item-open-task-actions'>
-                            <Text className='cvat-text-color'>Actions</Text>
-                            <MoreOutlined className='cvat-menu-icon' />
-                        </Col>
-                    </Dropdown>
+                    <Col className='cvat-item-open-task-actions'>
+                        <TaskActionsComponent
+                            taskInstance={taskInstance}
+                            triggerElement={(
+                                <div>
+                                    <Text className='cvat-text-color'>Actions</Text>
+                                    <MoreOutlined className='cvat-menu-icon' />
+                                </div>
+                            )}
+                        />
+                    </Col>
                 </Row>
             </Col>
         );

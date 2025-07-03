@@ -22,7 +22,7 @@ See:
 
 ## Single Shape mode annotation interface
 
-A set of controls in the interface of the **Single Shape** annotation mode may vary depends on different settings.
+A set of controls in the interface of the **Single Shape** annotation mode may vary depending on different settings.
 
 Images below displays the complete interface, featuring all available fields;
 as mentioned above, certain fields may be absent depending on the scenario.
@@ -48,9 +48,9 @@ The **Single Shape** annotation mode has the following fields:
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Prompt for Shape and Label**   | Displays the selected shape and label for the annotation task, for example: "Annotate **cat** on the image using **rectangle**".                                                                                                                                                                                                                                                                                                                  |
 | **Skip Button**                  | Enables moving to the next frame without annotating the current one, particularly useful when the frame does not have anything to be annotated.                                                                                                                                                                                                                                                                                                   |
-| **List of Hints**                | Offers guidance on using the interface effectively, including: <br> - Click **Skip** for frames without required annotations. <br> - Hold the **Alt** button to avoid unintentional drawing (e.g. when you want only move the image). <br> - Use the **Ctrl+Z** combination to undo the last annotation if needed. <br> - Use the **Esc** button to completely reset the current drawing progress.                                                |
+| **List of Hints**                | Offers guidance on using the interface effectively, including: <br> - Click **Skip** for frames without required annotations. <br> - Hold the **Alt** button to avoid unintentional drawing (e.g. when you want only move the image). <br> - Use the **Ctrl+Z** combination to undo the last action if needed. <br> - Use the **Esc** button to completely reset the current drawing progress.                                                |
 | **Label selector**               | Allows for the selection of different labels (`cat`, or `dog` in our example) for annotation within the interface.                                                                                                                                                                                                                                                                                                                                |
-| **Label type selector**          | A drop-down list to select type of the label (rectangle, ellipce, etc). Only visible when the type of the shape is **Any**.                                                                                                                                                                                                                                                                                                                       |
+| **Label type selector**          | A drop-down list to select type of the label (rectangle, ellipse, etc). Only visible when the type of the shape is **Any**.                                                                                                                                                                                                                                                                                                                       |
 | **Options to Enable or Disable** | Provides configurable options to streamline the annotation process, such as: <br> - **Automatically go to the next frame**. <br> - **Automatically save when finish**. <br> - **Navigate only empty frames**. <br> - **Predefined number of points** - Specific to polyshape annotations, enabling this option auto-completes a shape once a predefined number of points is reached. Otherwise, pressing **N** is required to finalize the shape. |
 | **Number of Points**             | Applicable for polyshape annotations, indicating the number of points to use for image annotation.                                                                                                                                                                                                                                                                                                                                                |
 
@@ -62,7 +62,8 @@ To annotate in Single Shape mode, follow these steps:
 
 1. Open the job and switch to **Single Shape** mode.
 2. Annotate the image based on the selected shape.
-   For more information on shapes, see [Annotation Tools](http://localhost:1313/docs/getting_started/overview/#annotation-tools).
+   For more information on shapes, see
+   {{< ilink "/docs/getting_started/overview#annotation-tools" "Annotation Tools" >}}.
 3. (Optional) If the image does not contain any objects to annotate,
    click **Skip** at the top of the right panel.
 4. Submit your work.

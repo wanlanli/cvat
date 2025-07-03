@@ -1,34 +1,52 @@
-// Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2022-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React, { useCallback } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import Dropdown from 'antd/lib/dropdown';
 import Modal from 'antd/lib/modal';
-import { LoadingOutlined } from '@ant-design/icons';
+
+import { Project, User } from 'cvat-core-wrapper';
+import { useDropdownEditField, usePlugins } from 'utils/hooks';
 import { CombinedState } from 'reducers';
-import { deleteProjectAsync } from 'actions/projects-actions';
+import { deleteProjectAsync, updateProjectAsync } from 'actions/projects-actions';
 import { exportActions } from 'actions/export-actions';
 import { importActions } from 'actions/import-actions';
-import { useHistory } from 'react-router';
-import Menu from 'components/dropdown-menu';
-
-import { usePlugins } from 'utils/hooks';
+import UserSelector from 'components/task-page/user-selector';
+import ProjectActionsItems from './actions-menu-items';
 
 interface Props {
-    projectInstance: any;
+    projectInstance: Project;
+    triggerElement: JSX.Element;
 }
 
-function ProjectActionsMenuComponent(props: Props): JSX.Element {
-    const { projectInstance } = props;
-
-    const history = useHistory();
+function ProjectActionsComponent(props: Props): JSX.Element {
+    const { projectInstance, triggerElement } = props;
     const dispatch = useDispatch();
-    const plugins = usePlugins((state: CombinedState) => state.plugins.components.projectActions.items, props);
-    const exportBackupIsActive = useSelector((state: CombinedState) => (
-        state.export.projects.backup.current[projectInstance.id]
-    ));
+
+    const pluginActions = usePlugins((state: CombinedState) => state.plugins.components.projectActions.items, props);
+
+    const {
+        dropdownOpen,
+        editField,
+        startEditField,
+        stopEditField,
+        onOpenChange,
+        onMenuClick,
+    } = useDropdownEditField();
+
+    const onExportDataset = useCallback(() => {
+        dispatch(exportActions.openExportDatasetModal(projectInstance));
+    }, [projectInstance]);
+
+    const onImportDataset = useCallback(() => {
+        dispatch(importActions.openImportDatasetModal(projectInstance));
+    }, [projectInstance]);
+
+    const onBackupProject = useCallback(() => {
+        dispatch(exportActions.openExportBackupModal(projectInstance));
+    }, [projectInstance]);
 
     const onDeleteProject = useCallback((): void => {
         Modal.confirm({
@@ -44,88 +62,59 @@ function ProjectActionsMenuComponent(props: Props): JSX.Element {
             },
             okText: 'Delete',
         });
-    }, []);
+    }, [projectInstance]);
 
-    const menuItems: [JSX.Element, number][] = [];
-    menuItems.push([(
-        <Menu.Item key='export-dataset' onClick={() => dispatch(exportActions.openExportDatasetModal(projectInstance))}>
-            Export dataset
-        </Menu.Item>
-    ), 0]);
+    const onUpdateProjectAssignee = useCallback((assignee: User | null) => {
+        projectInstance.assignee = assignee;
+        dispatch(updateProjectAsync(projectInstance)).then(stopEditField);
+    }, [projectInstance]);
 
-    menuItems.push([(
-        <Menu.Item key='import-dataset' onClick={() => dispatch(importActions.openImportDatasetModal(projectInstance))}>
-            Import dataset
-        </Menu.Item>
-    ), 10]);
-
-    menuItems.push([(
-        <Menu.Item
-            key='backup-project'
-            disabled={exportBackupIsActive}
-            onClick={() => dispatch(exportActions.openExportBackupModal(projectInstance))}
-            icon={exportBackupIsActive && <LoadingOutlined id='cvat-export-project-loading' />}
-        >
-            Backup Project
-        </Menu.Item>
-    ), 20]);
-
-    menuItems.push([(
-        <Menu.Item key='view-analytics'>
-            <a
-                href={`/projects/${projectInstance.id}/analytics`}
-                onClick={(e: React.MouseEvent) => {
-                    e.preventDefault();
-                    history.push({
-                        pathname: `/projects/${projectInstance.id}/analytics`,
-                    });
-                    return false;
-                }}
-            >
-                View analytics
-            </a>
-        </Menu.Item>
-    ), 30]);
-
-    menuItems.push([(
-        <Menu.Item key='set-webhooks'>
-            <a
-                href={`/projects/${projectInstance.id}/webhooks`}
-                onClick={(e: React.MouseEvent) => {
-                    e.preventDefault();
-                    history.push({
-                        pathname: `/projects/${projectInstance.id}/webhooks`,
-                    });
-                    return false;
-                }}
-            >
-                Setup webhooks
-            </a>
-        </Menu.Item>
-    ), 40]);
-
-    menuItems.push([(
-        <React.Fragment key='delete'>
-            <Menu.Divider />
-            <Menu.Item key='delete' onClick={onDeleteProject}>
-                Delete
-            </Menu.Item>
-        </React.Fragment>
-    ), 50]);
-
-    menuItems.push(
-        ...plugins.map(({ component: Component, weight }, index) => {
-            const menuItem = Component({ key: index, targetProps: props });
-            return [menuItem, weight] as [JSX.Element, number];
-        }),
-    );
+    let menuItems;
+    if (editField) {
+        const fieldSelectors: Record<string, JSX.Element> = {
+            assignee: (
+                <UserSelector
+                    value={projectInstance.assignee}
+                    onSelect={(value: User | null): void => {
+                        if (projectInstance.assignee?.id === value?.id) return;
+                        onUpdateProjectAssignee(value);
+                    }}
+                />
+            ),
+        };
+        menuItems = [{
+            key: `${editField}-selector`,
+            label: fieldSelectors[editField],
+        }];
+    } else {
+        menuItems = ProjectActionsItems({
+            startEditField,
+            projectId: projectInstance.id,
+            assignee: projectInstance.assignee,
+            pluginActions,
+            onExportDataset,
+            onImportDataset,
+            onBackupProject,
+            onDeleteProject,
+        }, props);
+    }
 
     return (
-        <Menu selectable={false} className='cvat-project-actions-menu'>
-            { menuItems.sort((menuItem1, menuItem2) => menuItem1[1] - menuItem2[1])
-                .map((menuItem) => menuItem[0]) }
-        </Menu>
+        <Dropdown
+            destroyPopupOnHide
+            trigger={['click']}
+            open={dropdownOpen}
+            onOpenChange={onOpenChange}
+            menu={{
+                selectable: false,
+                className: 'cvat-project-actions-menu',
+                items: menuItems,
+                onClick: onMenuClick,
+            }}
+        >
+            {triggerElement}
+        </Dropdown>
     );
 }
 
-export default React.memo(ProjectActionsMenuComponent);
+export default React.memo(ProjectActionsComponent);

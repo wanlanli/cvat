@@ -1,4 +1,4 @@
-# Copyright (C) 2022 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import logging
 import urllib.parse
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from time import sleep
-from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Optional, TypeVar
 
 import attrs
 import packaging.specifiers as specifiers
@@ -20,8 +21,11 @@ import urllib3
 import urllib3.exceptions
 
 from cvat_sdk.api_client import ApiClient, Configuration, exceptions, models
-from cvat_sdk.core.exceptions import IncompatibleVersionException, InvalidHostException
-from cvat_sdk.core.helpers import expect_status
+from cvat_sdk.core.exceptions import (
+    BackgroundRequestException,
+    IncompatibleVersionException,
+    InvalidHostException,
+)
 from cvat_sdk.core.proxies.issues import CommentsRepo, IssuesRepo
 from cvat_sdk.core.proxies.jobs import JobsRepo
 from cvat_sdk.core.proxies.model_proxy import Repo
@@ -77,10 +81,10 @@ class Client:
         config: Optional[Config] = None,
         check_server_version: bool = True,
     ) -> None:
-        url = self._validate_and_prepare_url(url)
-
         self.logger = logger or logging.getLogger(__name__)
         """The root logger"""
+
+        url = self._validate_and_prepare_url(url)
 
         self.config = config or Config()
         """Configuration for this object"""
@@ -96,7 +100,7 @@ class Client:
         if check_server_version:
             self.check_server_version()
 
-        self._repos: Dict[str, Repo] = {}
+        self._repos: dict[str, Repo] = {}
         """A cache for created Repository instances"""
 
     _ORG_SLUG_HEADER = "X-Organization"
@@ -122,7 +126,7 @@ class Client:
             self.api_client.default_headers[self._ORG_SLUG_HEADER] = org_slug
 
     @contextmanager
-    def organization_context(self, slug: str) -> Iterator[None]:
+    def organization_context(self, slug: str) -> Generator[None, None, None]:
         prev_slug = self.organization_slug
         self.organization_slug = slug
         try:
@@ -132,8 +136,7 @@ class Client:
 
     ALLOWED_SCHEMAS = ("https", "http")
 
-    @classmethod
-    def _validate_and_prepare_url(cls, url: str) -> str:
+    def _validate_and_prepare_url(self, url: str) -> str:
         url_parts = url.split("://", maxsplit=1)
         if len(url_parts) == 2:
             schema, base_url = url_parts
@@ -143,21 +146,20 @@ class Client:
 
         base_url = base_url.rstrip("/")
 
-        if schema and schema not in cls.ALLOWED_SCHEMAS:
+        if schema and schema not in self.ALLOWED_SCHEMAS:
             raise InvalidHostException(
                 f"Invalid url schema '{schema}', expected "
-                f"one of <none>, {', '.join(cls.ALLOWED_SCHEMAS)}"
+                f"one of <none>, {', '.join(self.ALLOWED_SCHEMAS)}"
             )
 
         if not schema:
-            schema = cls._detect_schema(base_url)
+            schema = self._detect_schema(base_url)
             url = f"{schema}://{base_url}"
 
         return url
 
-    @classmethod
-    def _detect_schema(cls, base_url: str) -> str:
-        for schema in cls.ALLOWED_SCHEMAS:
+    def _detect_schema(self, base_url: str) -> str:
+        def attempt(schema: str) -> bool:
             with ApiClient(Configuration(host=f"{schema}://{base_url}")) as api_client:
                 with suppress(urllib3.exceptions.RequestError):
                     (_, response) = api_client.server_api.retrieve_about(
@@ -167,7 +169,22 @@ class Client:
                     if response.status in [200, 401]:
                         # Server versions prior to 2.3.0 respond with unauthorized
                         # 2.3.0 allows unauthorized access
-                        return schema
+                        return True
+            return False
+
+        if attempt("https"):
+            return "https"
+
+        self.logger.warning(
+            "Failed to connect to the server using HTTPS; will attempt HTTP instead"
+        )
+        self.logger.warning(
+            "This fallback will be removed in a future version of the SDK;"
+            " to avoid breakage, explicitly add 'https://' or 'http://' to the URL"
+        )
+
+        if attempt("http"):
+            return "http"
 
         raise InvalidHostException(
             "Failed to detect host schema automatically, please check "
@@ -184,7 +201,7 @@ class Client:
     def close(self) -> None:
         return self.__exit__(None, None, None)
 
-    def login(self, credentials: Tuple[str, str]) -> None:
+    def login(self, credentials: tuple[str, str]) -> None:
         (auth, _) = self.api_client.auth_api.create_login(
             models.LoginSerializerExRequest(username=credentials[0], password=credentials[1])
         )
@@ -209,37 +226,33 @@ class Client:
 
     def wait_for_completion(
         self: Client,
-        url: str,
+        rq_id: str,
         *,
-        success_status: int,
         status_check_period: Optional[int] = None,
-        query_params: Optional[Dict[str, Any]] = None,
-        post_params: Optional[Dict[str, Any]] = None,
-        method: str = "POST",
-        positive_statuses: Optional[Sequence[int]] = None,
-    ) -> urllib3.HTTPResponse:
+        log_prefix: Optional[str] = None,
+    ) -> tuple[models.Request, urllib3.HTTPResponse]:
         if status_check_period is None:
             status_check_period = self.config.status_check_period
 
-        positive_statuses = set(positive_statuses) | {success_status}
-
         while True:
+            request, response = self.api_client.requests_api.retrieve(rq_id)
+            status, message = request.status, request.message
+
+            log_prefix = log_prefix or f"{request.operation.type} operation"
+            self.logger.info(
+                "%s status: %s (message=%s)",
+                log_prefix,
+                status,
+                message,
+            )
+            if status.value == models.RequestStatus.allowed_values[("value",)]["FINISHED"]:
+                break
+            elif status.value == models.RequestStatus.allowed_values[("value",)]["FAILED"]:
+                raise BackgroundRequestException(message)
+
             sleep(status_check_period)
 
-            response = self.api_client.rest_client.request(
-                method=method,
-                url=url,
-                headers=self.api_client.get_common_headers(),
-                query_params=query_params,
-                post_params=post_params,
-            )
-
-            self.logger.debug("STATUS %s", response.status)
-            expect_status(positive_statuses, response)
-            if response.status == success_status:
-                break
-
-        return response
+        return request, response
 
     def check_server_version(self, fail_if_unsupported: Optional[bool] = None) -> None:
         if fail_if_unsupported is None:
@@ -331,8 +344,8 @@ class CVAT_API_V2:
         path: str,
         *,
         psub: Optional[Sequence[Any]] = None,
-        kwsub: Optional[Dict[str, Any]] = None,
-        query_params: Optional[Dict[str, Any]] = None,
+        kwsub: Optional[dict[str, Any]] = None,
+        query_params: Optional[dict[str, Any]] = None,
     ) -> str:
         url = self.host + path
         if psub or kwsub:
@@ -343,7 +356,7 @@ class CVAT_API_V2:
 
 
 def make_client(
-    host: str, *, port: Optional[int] = None, credentials: Optional[Tuple[str, str]] = None
+    host: str, *, port: Optional[int] = None, credentials: Optional[tuple[str, str]] = None
 ) -> Client:
     url = host.rstrip("/")
     if port:

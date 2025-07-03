@@ -1,5 +1,5 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2022-2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -20,11 +20,14 @@ import userAgreementsReducer from './useragreements-reducer';
 import reviewReducer from './review-reducer';
 import exportReducer from './export-reducer';
 import importReducer from './import-reducer';
+import consensusReducer from './consensus-reducer';
 import cloudStoragesReducer from './cloud-storages-reducer';
 import organizationsReducer from './organizations-reducer';
 import webhooksReducer from './webhooks-reducer';
 import invitationsReducer from './invitations-reducer';
+import requestsReducer from './requests-reducer';
 import serverAPIReducer from './server-api-reducer';
+import navigationReducer from './navigation-reducer';
 
 export default function createRootReducer(): Reducer {
     return combineReducers({
@@ -44,10 +47,13 @@ export default function createRootReducer(): Reducer {
         review: reviewReducer,
         export: exportReducer,
         import: importReducer,
+        consensus: consensusReducer,
         cloudStorages: cloudStoragesReducer,
         organizations: organizationsReducer,
         webhooks: webhooksReducer,
         invitations: invitationsReducer,
+        requests: requestsReducer,
         serverAPI: serverAPIReducer,
+        navigation: navigationReducer,
     });
 }

@@ -7,7 +7,7 @@ weight: 6
 ### Cutting holes in polygons
 
 Currently, CVAT does not support cutting transparent holes in polygons. However,
-it is poissble to generate holes in exported instance and class masks.
+it is possible to generate holes in exported instance and class masks.
 To do this, one needs to define a background class in the task and draw holes
 with it as additional shapes above the shapes needed to have holes:
 
@@ -49,13 +49,13 @@ Important notices:
 All the labels have associated colors, which are used in the generated masks.
 These colors can be changed in the task label properties:
 
-  ![](/images/label_color_picker.jpg)
+  ![Task label properties with color picker](/images/label_color_picker.jpg)
 
 Label colors are also displayed in the annotation window on the right panel,
 where you can show or hide specific labels
 (only the presented labels are displayed):
 
-  ![](/images/label_panel_anno_window.jpg)
+  ![Label tab with label colors open in annotation window](/images/label_panel_anno_window.jpg)
 
 A background class can be:
 - A default class, which is implicitly-added, of black color (RGB 0, 0, 0)

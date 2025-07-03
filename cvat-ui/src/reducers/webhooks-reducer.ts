@@ -1,4 +1,4 @@
-// Copyright (C) 2022 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,6 +11,7 @@ const defaultState: WebhooksState = {
     totalCount: 0,
     query: {
         page: 1,
+        pageSize: 10,
         id: null,
         projectId: null,
         search: null,

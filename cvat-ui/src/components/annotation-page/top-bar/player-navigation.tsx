@@ -1,23 +1,29 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2023-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React, {
     useState, useEffect, useCallback, CSSProperties,
 } from 'react';
+
 import { Row, Col } from 'antd/lib/grid';
-import Icon, { LinkOutlined, DeleteOutlined } from '@ant-design/icons';
+import Icon, {
+    LinkOutlined, DeleteOutlined, CopyOutlined, SearchOutlined,
+} from '@ant-design/icons';
 import Slider from 'antd/lib/slider';
 import InputNumber from 'antd/lib/input-number';
 import Text from 'antd/lib/typography/Text';
 import Modal from 'antd/lib/modal';
 
+import { Workspace } from 'reducers';
 import { RestoreIcon } from 'icons';
+import { registerComponentShortcuts } from 'actions/shortcuts-actions';
 import CVATTooltip from 'components/common/cvat-tooltip';
 import { clamp } from 'utils/math';
 import GlobalHotKeys, { KeyMap } from 'utils/mousetrap-react';
-import { Workspace } from 'reducers';
+import { ShortcutScope } from 'utils/enums';
+import { subKeyMap } from 'utils/component-subkeymap';
 
 interface Props {
     startFrame: number;
@@ -27,19 +33,46 @@ interface Props {
     frameNumber: number;
     frameFilename: string;
     frameDeleted: boolean;
-    deleteFrameAvailable: boolean;
     deleteFrameShortcut: string;
     focusFrameInputShortcut: string;
+    searchFrameByNameShortcut: string;
+    showSearchFrameByName: boolean;
     inputFrameRef: React.RefObject<HTMLInputElement>;
     keyMap: KeyMap;
     workspace: Workspace;
     onSliderChange(value: number): void;
     onInputChange(value: number): void;
     onURLIconClick(): void;
+    onCopyFilenameIconClick(): void;
     onDeleteFrame(): void;
     onRestoreFrame(): void;
     switchNavigationBlocked(blocked: boolean): void;
+    switchShowSearchPallet(visible: boolean): void;
 }
+
+const componentShortcuts = {
+    DELETE_FRAME: {
+        name: 'Delete frame',
+        description: 'Delete frame',
+        sequences: ['alt+del'],
+        scope: ShortcutScope.ANNOTATION_PAGE,
+    },
+    FOCUS_INPUT_FRAME: {
+        name: 'Focus input frame',
+        description: 'Focus on the element to change the current frame',
+        sequences: ['`'],
+        displayedSequences: ['~'],
+        scope: ShortcutScope.ANNOTATION_PAGE,
+    },
+    SEARCH_FRAME_BY_NAME: {
+        name: 'Search frame by name',
+        description: 'Open search frame by name dialog',
+        sequences: [],
+        scope: ShortcutScope.ANNOTATION_PAGE,
+    },
+};
+
+registerComponentShortcuts(componentShortcuts);
 
 function PlayerNavigation(props: Props): JSX.Element {
     const {
@@ -51,17 +84,20 @@ function PlayerNavigation(props: Props): JSX.Element {
         frameDeleted,
         deleteFrameShortcut,
         focusFrameInputShortcut,
+        searchFrameByNameShortcut,
         inputFrameRef,
         ranges,
         keyMap,
         workspace,
-        deleteFrameAvailable,
         onSliderChange,
         onInputChange,
         onURLIconClick,
+        onCopyFilenameIconClick,
         onDeleteFrame,
         onRestoreFrame,
         switchNavigationBlocked,
+        switchShowSearchPallet,
+        showSearchFrameByName,
     } = props;
 
     const [frameInputValue, setFrameInputValue] = useState<number>(frameNumber);
@@ -92,12 +128,7 @@ function PlayerNavigation(props: Props): JSX.Element {
         }
     }, [playing, frameNumber]);
 
-    const subKeyMap = {
-        DELETE_FRAME: keyMap.DELETE_FRAME,
-        FOCUS_INPUT_FRAME: keyMap.FOCUS_INPUT_FRAME,
-    };
-
-    const handlers = {
+    const handlers: Record<keyof typeof componentShortcuts, (event?: KeyboardEvent) => void> = {
         DELETE_FRAME: (event: KeyboardEvent | undefined) => {
             event?.preventDefault();
             onDeleteFrame();
@@ -108,7 +139,17 @@ function PlayerNavigation(props: Props): JSX.Element {
                 inputFrameRef.current.focus();
             }
         },
+        SEARCH_FRAME_BY_NAME: (event: KeyboardEvent | undefined) => {
+            if (showSearchFrameByName) {
+                event?.preventDefault();
+                switchShowSearchPallet(true);
+            }
+        },
     };
+
+    const onSearchIconClick = useCallback(() => {
+        switchShowSearchPallet(true);
+    }, [switchShowSearchPallet]);
 
     const deleteFrameIconStyle: CSSProperties = workspace === Workspace.SINGLE_SHAPE ? {
         pointerEvents: 'none',
@@ -136,7 +177,9 @@ function PlayerNavigation(props: Props): JSX.Element {
 
     return (
         <>
-            { workspace !== Workspace.SINGLE_SHAPE && <GlobalHotKeys keyMap={subKeyMap} handlers={handlers} />}
+            { workspace !== Workspace.SINGLE_SHAPE && (
+                <GlobalHotKeys keyMap={subKeyMap(componentShortcuts, keyMap)} handlers={handlers} />
+            )}
             <Col className='cvat-player-controls'>
                 <Row align='bottom'>
                     <Col>
@@ -150,17 +193,14 @@ function PlayerNavigation(props: Props): JSX.Element {
                         {!!ranges && (
                             <svg className='cvat-player-slider-progress' viewBox='0 0 1000 16' xmlns='http://www.w3.org/2000/svg'>
                                 {ranges.split(';').map((range) => {
-                                    const [start, end] = range.split(':').map((num) => +num);
-                                    const adjustedStart = Math.max(0, start - 1);
-                                    let totalSegments = stopFrame - startFrame;
-                                    if (totalSegments === 0) {
-                                        // corner case for jobs with one image
-                                        totalSegments = 1;
-                                    }
+                                    const [rangeStart, rangeStop] = range.split(':').map((num) => +num);
+                                    const totalSegments = stopFrame - startFrame + 1;
                                     const segmentWidth = 1000 / totalSegments;
-                                    const width = Math.max((end - adjustedStart), 1) * segmentWidth;
-                                    const offset = (Math.max((adjustedStart - startFrame), 0) / totalSegments) * 1000;
-                                    return (<rect rx={10} key={start} x={offset} y={0} height={16} width={width} />);
+                                    const width = (rangeStop - rangeStart + 1) * segmentWidth;
+                                    const offset = (Math.max((rangeStart - startFrame), 0) / totalSegments) * 1000;
+                                    return (
+                                        <rect rx={10} key={rangeStart} x={offset} y={0} height={16} width={width} />
+                                    );
                                 })}
                             </svg>
                         )}
@@ -168,17 +208,18 @@ function PlayerNavigation(props: Props): JSX.Element {
                 </Row>
                 <Row justify='center'>
                     <Col className='cvat-player-filename-wrapper'>
-                        <CVATTooltip title={frameFilename}>
+                        <CVATTooltip title={`${frameFilename}`}>
                             <Text type='secondary'>{frameFilename}</Text>
                         </CVATTooltip>
                     </Col>
-                    <Col offset={1}>
+                    <Col className='cvat-player-frame-actions' offset={1}>
+                        <CVATTooltip title='Copy frame filename'>
+                            <CopyOutlined className='cvat-player-copy-frame-name-icon' onClick={onCopyFilenameIconClick} />
+                        </CVATTooltip>
                         <CVATTooltip title='Create frame URL'>
                             <LinkOutlined className='cvat-player-frame-url-icon' onClick={onURLIconClick} />
                         </CVATTooltip>
-                        {
-                            deleteFrameAvailable && deleteFrameIcon
-                        }
+                        { deleteFrameIcon }
                     </Col>
                 </Row>
             </Col>
@@ -190,6 +231,9 @@ function PlayerNavigation(props: Props): JSX.Element {
                         type='number'
                         disabled={workspace === Workspace.SINGLE_SHAPE}
                         value={frameInputValue}
+                        min={startFrame}
+                        max={stopFrame}
+                        style={{ ['--frame-input-width' as string]: `${stopFrame.toString().length + 2}ch` }}
                         onChange={(value: number | undefined | string | null) => {
                             if (typeof value !== 'undefined' && value !== null) {
                                 setFrameInputValue(Math.floor(clamp(+value, startFrame, stopFrame)));
@@ -204,6 +248,18 @@ function PlayerNavigation(props: Props): JSX.Element {
                         }}
                     />
                 </CVATTooltip>
+            </Col>
+            <Col className='cvat-player-actions'>
+                {
+                    showSearchFrameByName && (
+                        <CVATTooltip title={`Search frame by name ${searchFrameByNameShortcut}`}>
+                            <SearchOutlined
+                                className='cvat-player-search-frame-name-icon'
+                                onClick={onSearchIconClick}
+                            />
+                        </CVATTooltip>
+                    )
+                }
             </Col>
         </>
     );

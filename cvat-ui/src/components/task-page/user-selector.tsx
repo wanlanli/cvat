@@ -1,5 +1,5 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2023-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -9,7 +9,7 @@ import Autocomplete from 'antd/lib/auto-complete';
 import Input from 'antd/lib/input';
 import debounce from 'lodash/debounce';
 
-import { User, getCore } from 'cvat-core-wrapper';
+import { User, getCore, ServerError } from 'cvat-core-wrapper';
 import { getCVATStore } from 'cvat-store';
 
 const core = getCore();
@@ -28,17 +28,18 @@ const searchUsers = debounce(
                 search: searchValue,
                 limit: 10,
                 is_active: true,
-            })
-            .then((result: User[]) => {
+            }).then((result: User[]) => {
                 if (result) {
                     setUsers(result);
                 }
+            }).catch((error: unknown) => {
+                // user may get logged out while debounding
+                // it is normal situation
+                if (!(error instanceof ServerError && error.code === 401)) {
+                    throw error;
+                }
             });
-    },
-    250,
-    {
-        maxWait: 750,
-    },
+    }, 500,
 );
 
 const initialUsersStorage: {
@@ -140,6 +141,8 @@ export default function UserSelector(props: Props): JSX.Element {
             }
 
             setSearchPhrase(value.username);
+        } else {
+            setSearchPhrase('');
         }
     }, [value]);
 
@@ -153,6 +156,7 @@ export default function UserSelector(props: Props): JSX.Element {
             onSelect={handleSelect}
             onBlur={onBlur}
             className={combinedClassName}
+            popupClassName='cvat-user-search-dropdown'
             options={users.map((user) => ({
                 value: user.id.toString(),
                 label: user.username,

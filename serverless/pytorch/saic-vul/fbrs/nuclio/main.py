@@ -1,5 +1,5 @@
 # Copyright (C) 2020-2022 Intel Corporation
-# Copyright (C) 2022-2024 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -12,7 +12,7 @@ from model_handler import ModelHandler
 def init_context(context):
     context.logger.info("Init context...  0%")
 
-    model = ModelHandler() # pylint: disable=no-value-for-parameter
+    model = ModelHandler()
     context.user_data.model = model
 
     context.logger.info("Init context...100%")

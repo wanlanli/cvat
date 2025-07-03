@@ -1,5 +1,5 @@
 // Copyright (C) 2019-2022 Intel Corporation
-// Copyright (C) 2022-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -15,7 +15,7 @@ export function isInteger(value): boolean {
 }
 
 export function isEmail(value): boolean {
-    return typeof value === 'string' && RegExp(/^[^\s@]+@[^\s@]+\.[^\s@]+$/).test(value);
+    return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 // Called with specific Enum context
@@ -74,19 +74,28 @@ export function checkObjectType(name, value, type, instance?): boolean {
                 return true;
             }
 
-            throw new ArgumentError(`"${name}" is expected to be "${type}", but "${typeof value}" has been got.`);
+            throw new ArgumentError(`"${name}" is expected to be "${type}", but "${typeof value}" received.`);
         }
     } else if (instance) {
         if (!(value instanceof instance)) {
             if (value !== undefined) {
                 throw new ArgumentError(
                     `"${name}" is expected to be ${instance.name}, but ` +
-                        `"${value.constructor.name}" has been got`,
+                        `"${value.constructor.name}" received`,
                 );
             }
 
-            throw new ArgumentError(`"${name}" is expected to be ${instance.name}, but "undefined" has been got.`);
+            throw new ArgumentError(`"${name}" is expected to be ${instance.name}, but "undefined" received`);
         }
+    }
+
+    return true;
+}
+
+export function checkInEnum<T>(name: string, value: T, values: T[]): boolean {
+    const possibleValues = Object.values(values);
+    if (!possibleValues.includes(value)) {
+        throw new ArgumentError(`Value ${name} must be on of [${possibleValues.join(', ')}]`);
     }
 
     return true;
@@ -128,29 +137,6 @@ export function camelToSnakeCase(str: string): string {
     return str.replace(/[A-Z]/g, (letter: string) => `_${letter.toLowerCase()}`);
 }
 
-export function filterFieldsToSnakeCase(filter: Record<string, string>, keysToSnake: string[]): Record<string, string> {
-    const searchParams:Record<string, string> = {};
-    for (const key of Object.keys(filter)) {
-        if (!keysToSnake.includes(key)) {
-            searchParams[key] = filter[key];
-        }
-    }
-    const filtersGroup = [];
-    for (const key of keysToSnake) {
-        if (filter[key]) {
-            filtersGroup.push({ '==': [{ var: camelToSnakeCase(key) }, filter[key]] });
-        }
-    }
-
-    if (searchParams.filter) {
-        const parsed = JSON.parse(searchParams.filter);
-        searchParams.filter = JSON.stringify({ and: [parsed, ...filtersGroup] });
-    } else if (filtersGroup.length) {
-        searchParams.filter = JSON.stringify({ and: [...filtersGroup] });
-    }
-    return searchParams;
-}
-
 export function isResourceURL(url: string): boolean {
     return /\/([0-9]+)$/.test(url);
 }
@@ -165,4 +151,32 @@ export function fieldsToSnakeCase(params: Record<string, any>): Record<string, a
         result[snakeCase(k)] = v;
     }
     return result;
+}
+
+export function filterFieldsToSnakeCase(
+    filter: Record<string, string | number>,
+    keysToSnake: string[],
+): Record<string, string | number> {
+    let searchParams: Record<string, string | number> = {};
+    for (const key of Object.keys(filter)) {
+        if (!keysToSnake.includes(key)) {
+            searchParams[key] = filter[key];
+        }
+    }
+    searchParams = fieldsToSnakeCase(searchParams);
+
+    const filtersGroup = [];
+    for (const key of keysToSnake) {
+        if (filter[key]) {
+            filtersGroup.push({ '==': [{ var: camelToSnakeCase(key) }, filter[key]] });
+        }
+    }
+
+    if (searchParams.filter) {
+        const parsed = JSON.parse(searchParams.filter);
+        searchParams.filter = JSON.stringify({ and: [parsed, ...filtersGroup] });
+    } else if (filtersGroup.length) {
+        searchParams.filter = JSON.stringify({ and: [...filtersGroup] });
+    }
+    return searchParams;
 }

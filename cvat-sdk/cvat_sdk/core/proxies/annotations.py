@@ -1,10 +1,11 @@
-# Copyright (C) 2022 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
 from abc import ABC
+from collections.abc import Sequence
 from enum import Enum
-from typing import Optional, Sequence
+from typing import Optional
 
 from cvat_sdk import models
 from cvat_sdk.core.proxies.model_proxy import _EntityT
@@ -19,17 +20,12 @@ class AnnotationUpdateAction(Enum):
 class AnnotationCrudMixin(ABC):
     # TODO: refactor
 
-    @property
-    def _put_annotations_data_param(self) -> str: ...
-
     def get_annotations(self: _EntityT) -> models.ILabeledData:
         (annotations, _) = self.api.retrieve_annotations(getattr(self, self._model_id_field))
         return annotations
 
     def set_annotations(self: _EntityT, data: models.ILabeledDataRequest):
-        self.api.update_annotations(
-            getattr(self, self._model_id_field), **{self._put_annotations_data_param: data}
-        )
+        self.api.update_annotations(getattr(self, self._model_id_field), labeled_data_request=data)
 
     def update_annotations(
         self: _EntityT,

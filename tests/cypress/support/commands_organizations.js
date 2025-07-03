@@ -1,5 +1,5 @@
 // Copyright (C) 2022 Intel Corporation
-// Copyright (C) 2023-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -8,6 +8,7 @@
 function openOrganizationsMenu() {
     cy.get('.cvat-header-menu-user-dropdown')
         .should('exist').and('be.visible').click();
+    cy.wait(500); // animation
     cy.get('.cvat-header-menu')
         .should('exist')
         .and('be.visible')
@@ -122,13 +123,13 @@ Cypress.Commands.add('checkOrganizationParams', (organizationParams) => {
 });
 
 Cypress.Commands.add('checkOrganizationMembers', (expectedMembersCount, expectedOrganizationMembers) => {
-    const orgMembersUserameText = [];
+    const orgMembersUsernameText = [];
     cy.get('.cvat-organization-member-item').should('have.length', expectedMembersCount);
     cy.get('.cvat-organization-member-item-username').each((el) => {
-        orgMembersUserameText.push(el.text());
+        orgMembersUsernameText.push(el.text());
     });
     cy.get('.cvat-organization-member-item-username').then(() => {
-        expect(orgMembersUserameText).to.include.members(expectedOrganizationMembers);
+        expect(orgMembersUsernameText).to.include.members(expectedOrganizationMembers);
     });
 });
 
@@ -167,4 +168,18 @@ Cypress.Commands.add('removeMemberFromOrganization', (username) => {
     cy.get('.cvat-modal-organization-member-remove')
         .contains('button', 'Yes, remove')
         .click();
+});
+
+Cypress.Commands.add('headlessCreateOrganization', (data = {}) => {
+    cy.window().then(async ($win) => {
+        const organization = new $win.cvat.classes.Organization({ ...data });
+        const result = await organization.save();
+        return cy.wrap(result);
+    });
+});
+
+Cypress.Commands.add('headlessDeleteOrganization', (orgId) => {
+    cy.window().then(($win) => cy.wrap($win.cvat.organizations.get({
+        filter: `{"and":[{"==":[{"var":"id"},${orgId}]}]}`,
+    })).then(([organization]) => cy.wrap(organization.remove())));
 });

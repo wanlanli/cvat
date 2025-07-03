@@ -18,6 +18,10 @@ and enhance user satisfaction.
 
 CVAT analytics are available from the top menu.
 
+Superusers and users with administrator role have access to analytics.
+Permission to access analytics can also be granted when editing a user
+on admin page by `Has access to analytics` checkbox.
+
 ![CVAT Analytics](/images/analytics_menu.jpg)
 
 > Note: CVAT analytics and monitoring are available only for on-prem solution.
@@ -29,6 +33,7 @@ See:
   - [Ports settings](#ports-settings)
   - [Events log structure](#events-log-structure)
   - [Types of supported events](#types-of-supported-events)
+  - [Working time calculation](#working-time-calculation)
   - [Request `id` for tracking](#request-id-for-tracking)
   - [Fetching event data as CSV from the `/api/events` endpoint](#fetching-event-data-as-csv-from-the-apievents-endpoint)
 - [Dashboards](#dashboards)
@@ -64,7 +69,7 @@ docker compose up -d
 ### Ports settings
 
 If you cannot access analytics on
-development environnement,
+development environment,
 see {{< ilink "/docs/contributing/development-environment#cvat-analytics-ports" "Analytics Ports" >}}
 
 ### Events log structure
@@ -128,31 +133,67 @@ Server events:
 
 - `export:dataset`, `import:dataset`
 
+- `call:function`
+
+- `create:membership`, `update:membership`, `delete:membership`
+
+- `create:webhook`, `update:webhook`, `delete:webhook`
+
+- `create:invitation`, `delete:invitation`
+
 Client events:
 
 - `load:cvat`
 
-- `load:job`, `save:job`, `restore:job`
-- `upload:annotations`
-- `send:exception`
-- `send:task_info`
+- `load:job`, `save:job`
 
-- `draw:object`, `paste:object`, `copy:object`, `propagate:object`, `drag:object`, `resize:object`, `delete:object`, `lock:object`, `merge:objects`
-- `change:attribute`
-- `change:label`
+- `send:exception`
+
+- `draw:object`, `paste:object`, `copy:object`, `propagate:object`, `drag:object`, `resize:object`, `delete:object`, `merge:objects`, `split:objects`, `group:objects`, `slice:object`,
+`join:objects`
 
 - `change:frame`
+
 - `zoom:image`, `fit:image`, `rotate:image`
 
 - `action:undo`, `action:redo`
 
-- `press:shortcut`
-- `send:debug_info`
-
 - `run:annotations_action`
+
 - `click:element`
 
+- `debug:info`
+
 <!--lint enable maximum-line-length-->
+
+### Working time calculation
+
+Here is a short overview of how CVAT deals with the user's working time:
+
+- The user interface collects events when a user interacts with the interface
+  (resizing canvas, drawing objects, clicking buttons, etc)
+  The structure of one single event is described [here](#events-log-structure).
+
+- The user interface sends these events in bulk to the server.
+  Currently, it uses the following triggers to send events:
+  - Periodical timer (~90 seconds)
+  - A user clicks the "Save" button on the annotation view
+  - A user opens the annotation view
+  - A user closes the annotation view (but not the tab/browser)
+  - A user clicks **Logout** button
+
+- When events reach the server, it calculates working time based on timestamps of the events.
+
+- The working time for an event is computed as the sum of the following:
+  - The difference between the start time of the event and the end time of
+    the previous event, if it is not more than 100 seconds.
+  - The duration of the event, for events of type `change:frame`.
+
+- After calculation, the server generates `send:working_time` events with time value in payload.
+  These events may or may not be bound to a certain job/task/project,
+  depending on the client-side events that were used to generate them.
+
+- CVAT saves the event in the database and later these events are used to compute metrics for analytics.
 
 ### Request `id` for tracking
 
@@ -170,63 +211,46 @@ generated on the server in addition to the **Task** object.
 All events associated with this operation will have the same `request_id` in
 the payload field.
 
-### Fetching event data as CSV from the `/api/events` endpoint
+### Export event data
 
-<!--lint disable maximum-line-length-->
+You can export the event data as a CSV file locally and to cloud storage.
 
-The `/api/events` endpoint allows the fetching of
-event data with filtering parameters such as
-`org_id`, `project_id`, `task_id`, `job_id`, and `user_id`.
+To export the data locally:
+1. Initiate the export process by sending a `POST` request to `/api/events/export` endpoint.
+   The endpoint accepts several query parameters to filter events:
+   `org_id`, `project_id`, `task_id`, `job_id`, `user_id`, `to` and `from`.
+   For more details, see
+   [Swagger API Documentation](https://app.cvat.ai/api/swagger/#/events/events_create_export).
+   For example:
 
-For more details,
-see [Swagger API Documentation](https://app.cvat.ai/api/swagger/#/events/events_list).
+   ```bash
+   curl -X POST -u 'user:pass' https://app.cvat.ai/api/events/export?job_id=123
+   ```
 
-For example, to fetch all events associated with a specific job,
-the following `curl` command can be used:
+1. You can check the status of the export process by sending a GET request with the `rq_id` to the
+   [`/api/requests/{id}`](https://app.cvat.ai/api/swagger/#/requests/requests_retrieve) endpoint:
 
-```bash
-curl --user 'user:pass' https://app.cvat.ai/api/events?job_id=123
-```
+   ```bash
+   curl -I --user 'user:pass' https://app.cvat.ai/api/requests/rq_id
+   ```
 
-In the response, you will receive a query ID:
+   Once the export process finishes, the request returns an object with `"status": "finished"` and `"result_url": "URL"`.
 
-```json
-{ "query_id": "150cac1f-09f1-4d73-b6a5-5f47aa5d0031" }
-```
+1. Download the event data file locally using `result_url`:
+   ```bash
+   curl -u user:password -o path/to/file.csv result_url
+   ```
 
-As this process may take some time to complete,
-the status of the request can be checked by
-adding the query parameter `query_id` to the request:
+   This command will download and save the CSV file to `path/to/file.csv` on your local machine.
 
-```bash
-curl -I --user 'user:pass' https://app.cvat.ai/api/events?job_id=123&query_id=150cac1f-09f1-4d73-b6a5-5f47aa5d0031
-```
 
-Upon successful creation, the server will return a `201 Created` status:
-
-```
-HTTP/2 201
-allow: GET, POST, HEAD, OPTIONS
-date: Tue, 16 May 2023 13:38:42 GMT
-referrer-policy: same-origin
-server: Apache
-vary: Accept,Origin,Cookie
-x-content-type-options: nosniff
-x-frame-options: DENY
-x-request-id: 4631f5fa-a4f0-42a8-b77b-7426fc298a85
-```
-
-The CSV file can be downloaded by
-adding the `action=download` query parameter to the request:
+To save the CSV file with the event data to cloud storage, you can use the
+`/api/events/export` endpoint with `cloud_storage_id` and `location=cloud_storage` parameters,
+for example:
 
 ```bash
-curl --user 'user:pass' https://app.cvat.ai/api/events?job_id=123&query_id=150cac1f-09f1-4d73-b6a5-5f47aa5d0031&action=download > /tmp/events.csv
+curl -X POST -u user:password "https://app.cvat.ai/api/events/export?cloud_storage_id=your_cloud_storage_id&location=cloud_storage"
 ```
-
-This will download and save the file to `/tmp/events.csv`
-on your local machine.
-
-<!--lint enable maximum-line-length-->
 
 ## Dashboards
 
@@ -381,23 +405,23 @@ To save the updated configuration, do the following:
 
 1. **Update Configuration**: Start by making your desired changes in the query.
 
-2. **Apply Changes**: Once you've made your changes,
+1. **Apply Changes**: Once you've made your changes,
    click the **Apply** button to ensure the changes are implemented.
 
    ![Apply changes](/images/apply.jpg)
 
-3. **Save Configuration**: To save your applied changes, on the top of the dashboard,
+1. **Save Configuration**: To save your applied changes, on the top of the dashboard,
    click the **Save** button.
 
    ![Apply changes](/images/save_results.jpg)
 
-4. **Replace Configuration File**: After saving, replace the existing
+1. **Replace Configuration File**: After saving, replace the existing
    Grafana dashboard configuration file is located at
    `components/analytics/grafana/dashboards` with the new JSON configuration file.
 
    ![Apply changes](/images/save_json.jpg)
 
-5. **Restart Grafana Service**: To ensure, that all changes take effect,
+1. **Restart Grafana Service**: To ensure, that all changes take effect,
    restart the Grafana service. If you're using Docker Compose,
    execute the following command: `docker compose restart cvat_grafana`.
 

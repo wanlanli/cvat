@@ -1,17 +1,17 @@
 // Copyright (C) 2019-2022 Intel Corporation
-// Copyright (C) 2022-2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
-import { Dispatch, ActionCreator } from 'redux';
-
-import { ActionUnion, createAction, ThunkAction } from 'utils/redux';
+import {
+    ActionUnion, createAction, ThunkAction, ThunkDispatch,
+} from 'utils/redux';
 import {
     ProjectsQuery, TasksQuery, CombinedState,
 } from 'reducers';
 import { getTasksAsync } from 'actions/tasks-actions';
 import { getCVATStore } from 'cvat-store';
-import { getCore } from 'cvat-core-wrapper';
+import { getCore, Project } from 'cvat-core-wrapper';
 import { filterNull } from 'utils/filter-null';
 
 const cvat = getCore();
@@ -30,11 +30,13 @@ export enum ProjectsActionTypes {
     GET_PROJECT_PREVIEW = 'GET_PROJECT_PREVIEW',
     GET_PROJECT_PREVIEW_SUCCESS = 'GET_PROJECT_PREVIEW_SUCCESS',
     GET_PROJECT_PREVIEW_FAILED = 'GET_PROJECT_PREVIEW_FAILED',
+    UPDATE_PROJECT = 'UPDATE_PROJECT',
+    UPDATE_PROJECT_SUCCESS = 'UPDATE_PROJECT_SUCCESS',
+    UPDATE_PROJECT_FAILED = 'UPDATE_PROJECT_FAILED',
 }
 
-// prettier-ignore
 const projectActions = {
-    getProjects: () => createAction(ProjectsActionTypes.GET_PROJECTS),
+    getProjects: (fetchingTimestamp: number) => createAction(ProjectsActionTypes.GET_PROJECTS, { fetchingTimestamp }),
     getProjectsSuccess: (array: any[], count: number) => (
         createAction(ProjectsActionTypes.GET_PROJECTS_SUCCESS, { array, count })
     ),
@@ -63,12 +65,17 @@ const projectActions = {
     getProjectPreviewFailed: (projectID: number, error: any) => (
         createAction(ProjectsActionTypes.GET_PROJECT_PREVIEW_FAILED, { projectID, error })
     ),
+    updateProject: (projectId: number) => createAction(ProjectsActionTypes.UPDATE_PROJECT, { projectId }),
+    updateProjectSuccess: (project: Project) => (
+        createAction(ProjectsActionTypes.UPDATE_PROJECT_SUCCESS, { project })
+    ),
+    updateProjectFailed: (error: any) => createAction(ProjectsActionTypes.UPDATE_PROJECT_FAILED, { error }),
 };
 
 export type ProjectActions = ActionUnion<typeof projectActions>;
 
 export function getProjectTasksAsync(tasksQuery: Partial<TasksQuery> = {}): ThunkAction<void> {
-    return (dispatch: ActionCreator<Dispatch>, getState: () => CombinedState): void => {
+    return (dispatch: ThunkDispatch, getState: () => CombinedState): void => {
         const store = getCVATStore();
         const state: CombinedState = store.getState();
         dispatch(projectActions.updateProjectsGettingQuery(
@@ -87,8 +94,13 @@ export function getProjectTasksAsync(tasksQuery: Partial<TasksQuery> = {}): Thun
 export function getProjectsAsync(
     query: Partial<ProjectsQuery>, tasksQuery: Partial<TasksQuery> = {},
 ): ThunkAction {
-    return async (dispatch: ActionCreator<Dispatch>): Promise<void> => {
-        dispatch(projectActions.getProjects());
+    return async (dispatch: ThunkDispatch, getState): Promise<void> => {
+        const requestedOn = Date.now();
+        const isRequestRelevant = (): boolean => (
+            getState().projects.fetchingTimestamp === requestedOn
+        );
+
+        dispatch(projectActions.getProjects(requestedOn));
         dispatch(projectActions.updateProjectsGettingQuery(query, tasksQuery));
 
         // Clear query object from null fields
@@ -101,26 +113,28 @@ export function getProjectsAsync(
         try {
             result = await cvat.projects.get(filteredQuery);
         } catch (error) {
-            dispatch(projectActions.getProjectsFailed(error));
+            if (isRequestRelevant()) {
+                dispatch(projectActions.getProjectsFailed(error));
+            }
             return;
         }
 
-        const array = Array.from(result);
-
-        dispatch(projectActions.getProjectsSuccess(array, result.count));
-
-        // Appropriate tasks fetching process needs with retrieving only a single project
-        if (Object.keys(filteredQuery).includes('id') && typeof filteredQuery.id === 'number') {
-            dispatch(getProjectTasksAsync({
-                ...tasksQuery,
-                projectId: filteredQuery.id,
-            }));
+        if (isRequestRelevant()) {
+            const array = Array.from(result);
+            dispatch(projectActions.getProjectsSuccess(array, result.count));
+            // Appropriate tasks fetching process needs with retrieving only a single project
+            if (Object.keys(filteredQuery).includes('id') && typeof filteredQuery.id === 'number') {
+                dispatch(getProjectTasksAsync({
+                    ...tasksQuery,
+                    projectId: filteredQuery.id,
+                }));
+            }
         }
     };
 }
 
 export function createProjectAsync(data: any): ThunkAction {
-    return async (dispatch: ActionCreator<Dispatch>): Promise<void> => {
+    return async (dispatch: ThunkDispatch): Promise<void> => {
         const projectInstance = new cvat.classes.Project(data);
 
         dispatch(projectActions.createProject());
@@ -136,7 +150,7 @@ export function createProjectAsync(data: any): ThunkAction {
 }
 
 export function deleteProjectAsync(projectInstance: any): ThunkAction {
-    return async (dispatch: ActionCreator<Dispatch>): Promise<void> => {
+    return async (dispatch: ThunkDispatch): Promise<void> => {
         dispatch(projectActions.deleteProject(projectInstance.id));
         try {
             await projectInstance.delete();
@@ -156,3 +170,19 @@ export const getProjectsPreviewAsync = (project: any): ThunkAction => async (dis
         dispatch(projectActions.getProjectPreviewFailed(project.id, error));
     }
 };
+
+export function updateProjectAsync(
+    projectInstance: Project,
+): ThunkAction<Promise<Project>> {
+    return async (dispatch: ThunkDispatch): Promise<Project> => {
+        dispatch(projectActions.updateProject(projectInstance.id));
+        try {
+            const updatedProject = await projectInstance.save();
+            dispatch(projectActions.updateProjectSuccess(updatedProject));
+            return updatedProject;
+        } catch (error) {
+            dispatch(projectActions.updateProjectFailed(error));
+            throw error;
+        }
+    };
+}

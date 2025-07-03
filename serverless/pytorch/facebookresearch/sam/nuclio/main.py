@@ -1,4 +1,4 @@
-# Copyright (C) 2023 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -30,7 +30,7 @@ def handler(context, event):
     features = context.user_data.model.handle(image)
 
     return context.Response(body=json.dumps({
-            'blob': base64.b64encode((features.cpu().numpy() if features.is_cuda else features.numpy())).decode(),
+            'blob': base64.b64encode(features.cpu().numpy() if features.is_cuda else features.numpy()).decode(),
         }),
         headers={},
         content_type='application/json',

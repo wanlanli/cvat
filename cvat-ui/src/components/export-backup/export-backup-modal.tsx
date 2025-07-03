@@ -1,19 +1,23 @@
-// Copyright (c) 2022 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import './styles.scss';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useHistory } from 'react-router';
 import Modal from 'antd/lib/modal';
 import Notification from 'antd/lib/notification';
 import Text from 'antd/lib/typography/Text';
 import Input from 'antd/lib/input';
 import Form from 'antd/lib/form';
-import { CombinedState, StorageLocation } from 'reducers';
+import { CombinedState } from 'reducers';
 import { exportActions, exportBackupAsync } from 'actions/export-actions';
-import { getCore, Storage, StorageData } from 'cvat-core-wrapper';
+import {
+    getCore, Storage, StorageData, StorageLocation,
+} from 'cvat-core-wrapper';
 
+import CVATMarkdown from 'components/common/cvat-markdown';
 import TargetStorageField from 'components/storage/target-storage-field';
 
 const core = getCore();
@@ -35,6 +39,7 @@ const initialValues: FormValues = {
 
 function ExportBackupModal(): JSX.Element {
     const dispatch = useDispatch();
+    const history = useHistory();
     const [form] = Form.useForm();
     const [instanceType, setInstanceType] = useState('');
     const [useDefaultStorage, setUseDefaultStorage] = useState(true);
@@ -98,11 +103,13 @@ function ExportBackupModal(): JSX.Element {
                 ),
             );
             closeModal();
+
+            const description = 'Backup export was started. You can check progress [here](/requests).';
             Notification.info({
                 message: 'Backup export started',
-                description:
-                    'Backup export was started. ' +
-                    'Download will start automatically as soon as the file is ready.',
+                description: (
+                    <CVATMarkdown history={history}>{description}</CVATMarkdown>
+                ),
                 className: 'cvat-notification-notice-export-backup-start',
             });
         },
@@ -112,7 +119,7 @@ function ExportBackupModal(): JSX.Element {
     return (
         <Modal
             title={<Text strong>{`Export ${instanceType}`}</Text>}
-            visible={!!instance}
+            open={!!instance}
             onCancel={closeModal}
             onOk={() => form.submit()}
             className={`cvat-modal-export-${instanceType.split(' ')[0]}`}

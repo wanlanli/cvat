@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2023 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -7,21 +7,24 @@ from __future__ import annotations
 import io
 import json
 import mimetypes
+import os
 import shutil
+from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
-from time import sleep
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 from PIL import Image
 
 from cvat_sdk.api_client import apis, exceptions, models
-from cvat_sdk.core.downloading import Downloader
 from cvat_sdk.core.helpers import get_paginated_collection
 from cvat_sdk.core.progress import ProgressReporter
 from cvat_sdk.core.proxies.annotations import AnnotationCrudMixin
 from cvat_sdk.core.proxies.jobs import Job
 from cvat_sdk.core.proxies.model_proxy import (
+    DownloadBackupMixin,
+    ExportDatasetMixin,
+    ModelBatchDeleteMixin,
     ModelCreateMixin,
     ModelDeleteMixin,
     ModelListMixin,
@@ -59,9 +62,10 @@ class Task(
     ModelUpdateMixin[models.IPatchedTaskWriteRequest],
     ModelDeleteMixin,
     AnnotationCrudMixin,
+    ExportDatasetMixin,
+    DownloadBackupMixin,
 ):
     _model_partial_update_arg = "patched_task_write_request"
-    _put_annotations_data_param = "task_annotations_update_request"
 
     def upload_data(
         self,
@@ -69,7 +73,7 @@ class Task(
         *,
         resource_type: ResourceType = ResourceType.LOCAL,
         pbar: Optional[ProgressReporter] = None,
-        params: Optional[Dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         wait_for_completion: bool = True,
         status_check_period: Optional[int] = None,
     ) -> None:
@@ -96,6 +100,7 @@ class Task(
                     "filename_pattern",
                     "cloud_storage_id",
                     "server_files_exclude",
+                    "validation_params",
                 ],
             )
         )
@@ -103,56 +108,41 @@ class Task(
             data["frame_filter"] = f"step={params.get('frame_step')}"
 
         if resource_type in [ResourceType.REMOTE, ResourceType.SHARE]:
-            for resource in resources:
-                if not isinstance(resource, str):
-                    raise TypeError(f"resources: expected instances of str, got {type(resource)}")
+
+            str_resources = list(map(os.fspath, resources))
 
             if resource_type is ResourceType.REMOTE:
-                data["remote_files"] = resources
+                data["remote_files"] = str_resources
             elif resource_type is ResourceType.SHARE:
-                data["server_files"] = resources
+                data["server_files"] = str_resources
 
-            self.api.create_data(
+            result, _ = self.api.create_data(
                 self.id,
                 data_request=models.DataRequest(**data),
             )
+            rq_id = result.rq_id
         elif resource_type == ResourceType.LOCAL:
             url = self._client.api_map.make_endpoint_url(
                 self.api.create_data_endpoint.path, kwsub={"id": self.id}
             )
 
-            DataUploader(self._client).upload_files(
+            response = DataUploader(self._client).upload_files(
                 url, list(map(Path, resources)), pbar=pbar, **data
             )
+            response = json.loads(response.data)
+            rq_id = response.get("rq_id")
+            assert rq_id, "The rq_id param was not found in the response"
 
         if wait_for_completion:
             if status_check_period is None:
                 status_check_period = self._client.config.status_check_period
 
             self._client.logger.info("Awaiting for task %s creation...", self.id)
-            while True:
-                sleep(status_check_period)
-                (status, response) = self.api.retrieve_status(self.id)
-
-                self._client.logger.info(
-                    "Task %s creation status: %s (message=%s)",
-                    self.id,
-                    status.state.value,
-                    status.message,
-                )
-
-                if (
-                    status.state.value
-                    == models.RqStatusStateEnum.allowed_values[("value",)]["FINISHED"]
-                ):
-                    break
-                elif (
-                    status.state.value
-                    == models.RqStatusStateEnum.allowed_values[("value",)]["FAILED"]
-                ):
-                    raise exceptions.ApiException(
-                        status=status.state.value, reason=status.message, http_resp=response
-                    )
+            self._client.wait_for_completion(
+                rq_id,
+                status_check_period=status_check_period,
+                log_prefix=f"Task {self.id} creation",
+            )
 
             self.fetch()
 
@@ -161,11 +151,12 @@ class Task(
         format_name: str,
         filename: StrPath,
         *,
+        conv_mask_to_poly: Optional[bool] = None,
         status_check_period: Optional[int] = None,
         pbar: Optional[ProgressReporter] = None,
     ):
         """
-        Upload annotations for a task in the specified format (e.g. 'YOLO ZIP 1.0').
+        Upload annotations for a task in the specified format (e.g. 'YOLO 1.1').
         """
 
         filename = Path(filename)
@@ -175,6 +166,7 @@ class Task(
             filename,
             format_name,
             url_params={"id": self.id},
+            conv_mask_to_poly=conv_mask_to_poly,
             pbar=pbar,
             status_check_period=status_check_period,
         )
@@ -224,7 +216,7 @@ class Task(
         outdir: StrPath = ".",
         quality: str = "original",
         filename_pattern: str = "frame_{frame_id:06d}{frame_ext}",
-    ) -> Optional[List[Image.Image]]:
+    ) -> Optional[list[Image.Image]]:
         """
         Download the requested frame numbers for a task and save images as outdir/filename_pattern
         """
@@ -251,61 +243,7 @@ class Task(
             outfile = filename_pattern.format(frame_id=frame_id, frame_ext=im_ext)
             im.save(outdir / outfile)
 
-    def export_dataset(
-        self,
-        format_name: str,
-        filename: StrPath,
-        *,
-        pbar: Optional[ProgressReporter] = None,
-        status_check_period: Optional[int] = None,
-        include_images: bool = True,
-    ) -> None:
-        """
-        Download annotations for a task in the specified format (e.g. 'YOLO ZIP 1.0').
-        """
-
-        filename = Path(filename)
-
-        if include_images:
-            endpoint = self.api.retrieve_dataset_endpoint
-        else:
-            endpoint = self.api.retrieve_annotations_endpoint
-
-        Downloader(self._client).prepare_and_download_file_from_endpoint(
-            endpoint=endpoint,
-            filename=filename,
-            url_params={"id": self.id},
-            query_params={"format": format_name},
-            pbar=pbar,
-            status_check_period=status_check_period,
-        )
-
-        self._client.logger.info(f"Dataset for task {self.id} has been downloaded to {filename}")
-
-    def download_backup(
-        self,
-        filename: StrPath,
-        *,
-        status_check_period: int = None,
-        pbar: Optional[ProgressReporter] = None,
-    ) -> None:
-        """
-        Download a task backup
-        """
-
-        filename = Path(filename)
-
-        Downloader(self._client).prepare_and_download_file_from_endpoint(
-            self.api.retrieve_backup_endpoint,
-            filename=filename,
-            pbar=pbar,
-            status_check_period=status_check_period,
-            url_params={"id": self.id},
-        )
-
-        self._client.logger.info(f"Backup for task {self.id} has been downloaded to {filename}")
-
-    def get_jobs(self) -> List[Job]:
+    def get_jobs(self) -> list[Job]:
         return [
             Job(self._client, model=m)
             for m in get_paginated_collection(
@@ -317,12 +255,12 @@ class Task(
         (meta, _) = self.api.retrieve_data_meta(self.id)
         return meta
 
-    def get_labels(self) -> List[models.ILabel]:
+    def get_labels(self) -> list[models.ILabel]:
         return get_paginated_collection(
             self._client.api_client.labels_api.list_endpoint, task_id=self.id
         )
 
-    def get_frames_info(self) -> List[models.IFrameMeta]:
+    def get_frames_info(self) -> list[models.IFrameMeta]:
         return self.get_meta().frames
 
     def remove_frames_by_ids(self, ids: Sequence[int]) -> None:
@@ -337,7 +275,7 @@ class TasksRepo(
     ModelCreateMixin[Task, models.ITaskWriteRequest],
     ModelRetrieveMixin[Task],
     ModelListMixin[Task],
-    ModelDeleteMixin,
+    ModelBatchDeleteMixin,
 ):
     _entity_type = Task
 
@@ -347,7 +285,7 @@ class TasksRepo(
         resources: Sequence[StrPath],
         *,
         resource_type: ResourceType = ResourceType.LOCAL,
-        data_params: Optional[Dict[str, Any]] = None,
+        data_params: Optional[dict[str, Any]] = None,
         annotation_path: str = "",
         annotation_format: str = "CVAT XML 1.1",
         status_check_period: int = None,
@@ -385,23 +323,15 @@ class TasksRepo(
 
         return task
 
+    # This is a backwards compatibility wrapper to support calls which pass
+    # the task_ids parameter by keyword (the base class implementation is generic,
+    # so it doesn't support this).
     def remove_by_ids(self, task_ids: Sequence[int]) -> None:
         """
         Delete a list of tasks, ignoring those which don't exist.
         """
 
-        for task_id in task_ids:
-            (_, response) = self.api.destroy(task_id, _check_status=False)
-
-            if 200 <= response.status <= 299:
-                self._client.logger.info(f"Task ID {task_id} deleted")
-            elif response.status == 404:
-                self._client.logger.info(f"Task ID {task_id} not found")
-            else:
-                self._client.logger.warning(
-                    f"Failed to delete task ID {task_id}: "
-                    f"{response.msg} (status {response.status})"
-                )
+        super().remove_by_ids(task_ids)
 
     def create_from_backup(
         self,
@@ -431,16 +361,14 @@ class TasksRepo(
             logger=self._client.logger.debug,
         )
 
-        rq_id = json.loads(response.data)["rq_id"]
-        response = self._client.wait_for_completion(
-            url,
-            success_status=201,
-            positive_statuses=[202],
-            post_params={"rq_id": rq_id},
-            status_check_period=status_check_period,
+        rq_id = json.loads(response.data).get("rq_id")
+        assert rq_id, "The rq_id was not found in server response"
+
+        request, response = self._client.wait_for_completion(
+            rq_id, status_check_period=status_check_period
         )
 
-        task_id = json.loads(response.data)["id"]
+        task_id = request.result_id
         self._client.logger.info(f"Task has been imported successfully. Task ID: {task_id}")
 
         return self.retrieve(task_id)

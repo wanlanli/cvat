@@ -1,10 +1,9 @@
 // Copyright (C) 2021-2022 Intel Corporation
-// Copyright (C) 2022-2023 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React from 'react';
-import copy from 'copy-to-clipboard';
 import { connect } from 'react-redux';
 
 import {
@@ -19,19 +18,21 @@ import {
     removeObject as removeObjectAction,
 } from 'actions/annotation-actions';
 import {
-    ActiveControl, CombinedState, ColorBy, ShapeType,
+    ActiveControl, CombinedState, ColorBy,
+    Workspace,
 } from 'reducers';
+import { openAnnotationsActionModal } from 'components/annotation-page/annotations-actions/annotations-actions-modal';
 import ObjectStateItemComponent from 'components/annotation-page/standard-workspace/objects-side-bar/object-item';
 import { getColor } from 'components/annotation-page/standard-workspace/objects-side-bar/shared';
 import openCVWrapper from 'utils/opencv-wrapper/opencv-wrapper';
 import { shift } from 'utils/math';
 import {
-    Label, ObjectState, Attribute, Job,
+    Label, ObjectState, Attribute, Job, ShapeType,
 } from 'cvat-core-wrapper';
 import { Canvas, CanvasMode } from 'cvat-canvas-wrapper';
-import { EventScope } from 'cvat-logger';
 import { Canvas3d } from 'cvat-canvas3d-wrapper';
 import { filterApplicableLabels } from 'utils/filter-applicable-labels';
+import { toClipboard } from 'utils/to-clipboard';
 
 interface OwnProps {
     readonly: boolean;
@@ -53,6 +54,7 @@ interface StateToProps {
     maxZLayer: number;
     normalizedKeyMap: Record<string, string>;
     canvasInstance: Canvas | Canvas3d;
+    workspace: Workspace;
 }
 
 interface DispatchToProps {
@@ -78,6 +80,7 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
                 frame: { number: frameNumber },
             },
             canvas: { instance: canvasInstance, ready, activeControl },
+            workspace,
         },
         settings: {
             shapes: { colorBy },
@@ -103,6 +106,7 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
         maxZLayer,
         normalizedKeyMap,
         canvasInstance: canvasInstance as Canvas | Canvas3d,
+        workspace,
     };
 }
 
@@ -233,7 +237,8 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
 
         const search = `frame=${frameNumber}&type=${objectState.objectType}&serverID=${objectState.serverID}`;
         const url = `${origin}${pathname}?${search}`;
-        copy(url);
+
+        toClipboard(url);
     };
 
     private switchOrientation = (): void => {
@@ -312,13 +317,8 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
     };
 
     private changeLabel = (label: any): void => {
-        const { jobInstance, objectState, readonly } = this.props;
+        const { objectState, readonly } = this.props;
         if (!readonly) {
-            jobInstance.logger.log(EventScope.changeLabel, {
-                object_id: objectState.clientID,
-                from: objectState.label.id,
-                to: label.id,
-            });
             objectState.label = label;
             this.commit();
         }
@@ -373,6 +373,11 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
         }
     };
 
+    private runAnnotationAction = (): void => {
+        const { objectState } = this.props;
+        openAnnotationsActionModal({ defaultObjectState: objectState });
+    };
+
     private commit(): void {
         const { objectState, readonly, updateState } = this.props;
         if (!readonly) {
@@ -390,6 +395,7 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
             normalizedKeyMap,
             readonly,
             jobInstance,
+            workspace,
         } = this.props;
 
         return (
@@ -410,11 +416,12 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
                 normalizedKeyMap={normalizedKeyMap}
                 labels={labels}
                 colorBy={colorBy}
+                workspace={workspace}
                 activate={this.activate}
                 remove={this.remove}
                 copy={this.copy}
-                propagate={this.propagate}
                 createURL={this.createURL}
+                propagate={this.propagate}
                 switchOrientation={this.switchOrientation}
                 toBackground={this.toBackground}
                 toForeground={this.toForeground}
@@ -423,6 +430,7 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
                 edit={this.edit}
                 slice={this.slice}
                 resetCuboidPerspective={this.resetCuboidPerspective}
+                runAnnotationAction={this.runAnnotationAction}
             />
         );
     }

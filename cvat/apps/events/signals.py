@@ -1,27 +1,31 @@
-# Copyright (C) 2023 CVAT.ai Corporation
+# Copyright (C) CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
-from django.dispatch import receiver
-from django.db.models.signals import pre_save, post_save, post_delete
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models.signals import post_delete, post_save, pre_save
+from django.dispatch import receiver
 
 from cvat.apps.engine.models import (
-    TimestampedModel,
+    CloudStorage,
+    Comment,
+    Issue,
+    Job,
+    Label,
     Project,
     Task,
-    Job,
+    TimestampedModel,
     User,
-    CloudStorage,
-    Issue,
-    Comment,
-    Label,
 )
-from cvat.apps.organizations.models import Organization
+from cvat.apps.organizations.models import Invitation, Membership, Organization
+from cvat.apps.webhooks.models import Webhook
 
-from .handlers import handle_update, handle_create, handle_delete
 from .event import EventScopeChoice, event_scope
+from .handlers import handle_create, handle_delete, handle_update
 
+
+@receiver(pre_save, sender=Webhook, dispatch_uid="webhook:update_receiver")
+@receiver(pre_save, sender=Membership, dispatch_uid="membership:update_receiver")
 @receiver(pre_save, sender=Organization, dispatch_uid="organization:update_receiver")
 @receiver(pre_save, sender=Project, dispatch_uid="project:update_receiver")
 @receiver(pre_save, sender=Task, dispatch_uid="task:update_receiver")
@@ -34,7 +38,8 @@ from .event import EventScopeChoice, event_scope
 def resource_update(sender, *, instance, update_fields, **kwargs):
     if (
         isinstance(instance, TimestampedModel)
-            and update_fields and list(update_fields) == ["updated_date"]
+        and update_fields
+        and list(update_fields) == ["updated_date"]
     ):
         # This is an optimization for the common case where only the date is bumped
         # (see `TimestampedModel.touch`). Since the actual update of the field will
@@ -52,11 +57,15 @@ def resource_update(sender, *, instance, update_fields, **kwargs):
         return
 
     scope = event_scope("update", resource_name)
-    if scope not in map(lambda a: a[0], EventScopeChoice.choices()):
+    if scope not in (a[0] for a in EventScopeChoice.choices()):
         return
 
     handle_update(scope=scope, instance=instance, old_instance=old_instance, **kwargs)
 
+
+@receiver(post_save, sender=Webhook, dispatch_uid="webhook:create_receiver")
+@receiver(post_save, sender=Membership, dispatch_uid="membership:create_receiver")
+@receiver(post_save, sender=Invitation, dispatch_uid="invitation:create_receiver")
 @receiver(post_save, sender=Organization, dispatch_uid="organization:create_receiver")
 @receiver(post_save, sender=Project, dispatch_uid="project:create_receiver")
 @receiver(post_save, sender=Task, dispatch_uid="task:create_receiver")
@@ -73,11 +82,15 @@ def resource_create(sender, instance, created, **kwargs):
     resource_name = instance.__class__.__name__.lower()
 
     scope = event_scope("create", resource_name)
-    if scope not in map(lambda a: a[0], EventScopeChoice.choices()):
+    if scope not in (a[0] for a in EventScopeChoice.choices()):
         return
 
     handle_create(scope=scope, instance=instance, **kwargs)
 
+
+@receiver(post_delete, sender=Webhook, dispatch_uid="webhook:delete_receiver")
+@receiver(post_delete, sender=Membership, dispatch_uid="membership:delete_receiver")
+@receiver(post_delete, sender=Invitation, dispatch_uid="invitation:delete_receiver")
 @receiver(post_delete, sender=Organization, dispatch_uid="organization:delete_receiver")
 @receiver(post_delete, sender=Project, dispatch_uid="project:delete_receiver")
 @receiver(post_delete, sender=Task, dispatch_uid="task:delete_receiver")
@@ -90,7 +103,7 @@ def resource_create(sender, instance, created, **kwargs):
 def resource_delete(sender, instance, **kwargs):
     resource_name = instance.__class__.__name__.lower()
     scope = event_scope("delete", resource_name)
-    if scope not in map(lambda a: a[0], EventScopeChoice.choices()):
+    if scope not in (a[0] for a in EventScopeChoice.choices()):
         return
 
     handle_delete(scope=scope, instance=instance, **kwargs)

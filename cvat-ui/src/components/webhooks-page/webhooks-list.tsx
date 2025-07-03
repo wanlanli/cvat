@@ -1,4 +1,4 @@
-// Copyright (C) 2022 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,7 @@ import WebhookItem from './webhook-item';
 function WebhooksList(): JSX.Element {
     const webhooks = useSelector((state: CombinedState) => state.webhooks.current);
     return (
-        <Row justify='center' align='middle'>
+        <Row justify='center' align='middle' className='cvat-resource-list-wrapper'>
             <Col className='cvat-webhooks-list' md={22} lg={18} xl={16} xxl={14}>
                 {webhooks.map(
                     (webhook: any): JSX.Element => (

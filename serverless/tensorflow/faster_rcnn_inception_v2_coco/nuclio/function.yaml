@@ -4,7 +4,6 @@ metadata:
   annotations:
     name: yeast2 via Tensorflow
     type: detector
-    framework: tensorflow
     spec: |
       [
         { "id": 1, "name": "cell", "type": "polygon"},
@@ -45,7 +44,7 @@ spec:
 
   triggers:
     myHttpTrigger:
-      maxWorkers: 2
+      numWorkers: 2
       kind: 'http'
       workerAvailabilityTimeoutMilliseconds: 10000
       attributes:

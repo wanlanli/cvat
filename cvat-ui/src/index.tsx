@@ -1,10 +1,10 @@
 // Copyright (C) 2020-2022 Intel Corporation
-// Copyright (C) 2023-2024 CVAT.ai Corporation
+// Copyright (C) CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { connect, Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 
@@ -17,13 +17,15 @@ import { getUserAgreementsAsync } from 'actions/useragreements-actions';
 import CVATApplication from 'components/cvat-app';
 import PluginsEntrypoint from 'components/plugins-entrypoint';
 import LayoutGrid from 'components/layout-grid/layout-grid';
-import logger, { EventScope } from 'cvat-logger';
+import { logError } from 'cvat-logger';
 import createCVATStore, { getCVATStore } from 'cvat-store';
 import createRootReducer from 'reducers/root-reducer';
 import { activateOrganizationAsync } from 'actions/organization-actions';
 import { resetErrors, resetMessages } from 'actions/notification-actions';
 import { getInvitationsAsync } from 'actions/invitations-actions';
+import { getRequestsAsync } from 'actions/requests-async-actions';
 import { getServerAPISchemaAsync } from 'actions/server-actions';
+import { navigationActions } from 'actions/navigation-actions';
 import { CombinedState, NotificationsState, PluginsState } from './reducers';
 
 createCVATStore(createRootReducer);
@@ -51,6 +53,8 @@ interface StateToProps {
     pluginComponents: PluginsState['components'];
     invitationsFetching: boolean;
     invitationsInitialized: boolean;
+    requestsFetching: boolean;
+    requestsInitialized: boolean;
     serverAPISchemaFetching: boolean;
     serverAPISchemaInitialized: boolean;
     isPasswordResetEnabled: boolean;
@@ -68,12 +72,14 @@ interface DispatchToProps {
     loadUserAgreements: () => void;
     loadOrganization: () => void;
     initInvitations: () => void;
+    initRequests: () => void;
     loadServerAPISchema: () => void;
+    onChangeLocation: (from: string, to: string) => void;
 }
 
 function mapStateToProps(state: CombinedState): StateToProps {
     const {
-        plugins, auth, formats, about, userAgreements, models, organizations, invitations, serverAPI,
+        plugins, auth, formats, about, userAgreements, models, organizations, invitations, serverAPI, requests,
     } = state;
 
     return {
@@ -97,6 +103,8 @@ function mapStateToProps(state: CombinedState): StateToProps {
         isModelPluginActive: plugins.list.MODELS,
         invitationsFetching: invitations.fetching,
         invitationsInitialized: invitations.initialized,
+        requestsFetching: requests.fetching,
+        requestsInitialized: requests.initialized,
         serverAPISchemaFetching: serverAPI.fetching,
         serverAPISchemaInitialized: serverAPI.initialized,
         isPasswordResetEnabled: serverAPI.configuration.isPasswordResetEnabled,
@@ -116,59 +124,29 @@ function mapDispatchToProps(dispatch: any): DispatchToProps {
         resetMessages: (): void => dispatch(resetMessages()),
         loadOrganization: (): void => dispatch(activateOrganizationAsync()),
         initInvitations: (): void => dispatch(getInvitationsAsync({ page: 1 }, true)),
+        initRequests: (): void => dispatch(getRequestsAsync({ page: 1 })),
         loadServerAPISchema: (): void => dispatch(getServerAPISchemaAsync()),
+        onChangeLocation: (from: string, to: string): void => dispatch(navigationActions.changeLocation(from, to)),
     };
 }
 
 const ReduxAppWrapper = connect(mapStateToProps, mapDispatchToProps)(CVATApplication);
 
-ReactDOM.render(
+const root = createRoot(document.getElementById('root') as HTMLDivElement);
+root.render((
     <Provider store={cvatStore}>
         <BrowserRouter>
             <PluginsEntrypoint />
             <ReduxAppWrapper />
         </BrowserRouter>
         <LayoutGrid />
-    </Provider>,
-    document.getElementById('root'),
-);
+    </Provider>
+));
 
-window.addEventListener('error', (errorEvent: ErrorEvent): boolean => {
-    const {
-        filename, lineno, colno, error,
-    } = errorEvent;
+window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    logError(event.reason, false, { type: 'unhandledrejection' });
+});
 
-    if (
-        filename && typeof lineno === 'number' &&
-        typeof colno === 'number' && error
-    ) {
-        // weird react behaviour
-        // it also gets event only in development environment, caught and handled in componentDidCatch
-        // discussion is here https://github.com/facebook/react/issues/10474
-        // and workaround is:
-        if (error.stack && error.stack.indexOf('invokeGuardedCallbackDev') >= 0) {
-            return true;
-        }
-
-        const logPayload = {
-            filename: errorEvent.filename,
-            line: errorEvent.lineno,
-            message: errorEvent.error.message,
-            column: errorEvent.colno,
-            stack: errorEvent.error.stack,
-        };
-
-        const store = getCVATStore();
-        const state: CombinedState = store.getState();
-        const { pathname } = window.location;
-        const re = /\/tasks\/[0-9]+\/jobs\/[0-9]+$/;
-        const { instance: job } = state.annotation.job;
-        if (re.test(pathname) && job) {
-            job.logger.log(EventScope.exception, logPayload);
-        } else {
-            logger.log(EventScope.exception, logPayload);
-        }
-    }
-
-    return false;
+window.addEventListener('error', (errorEvent: ErrorEvent) => {
+    logError(errorEvent.error, false, { type: 'error' });
 });
