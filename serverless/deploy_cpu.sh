@@ -26,7 +26,7 @@ do
     echo "Deploying $func_rel_path function..."
     /home/liwa/nuctl deploy --project-name cvat --path "$func_root" \
         --file "$func_config" --platform local
-    nuctl deploy --project-name cvat --path "$func_root" \
+    /home/liwa/nuctl deploy --project-name cvat --path "$func_root" \
         --file "$func_config" --platform local \
         --env CVAT_FUNCTIONS_REDIS_HOST=cvat_redis_ondisk \
         --env CVAT_FUNCTIONS_REDIS_PORT=6666 \

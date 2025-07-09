@@ -14,12 +14,16 @@ from detectron2.projects.panoptic_deeplab import (
     add_panoptic_deeplab_config,
 )
 from prediction import Predictor
-from skimage.measure import find_contours, approximate_polygon
+from skimage import measure
 
 
 # scp -r wlli@10.195.59.130:/home/wlli/Data/oneformer_mdel/model_0059999.pth .
+# scp -r wlli@10.195.59.130:/home/wlli/project/PytrochDeepyeastDeploy/saved_model_20250701.pth .
 threshold = 0.5
-area_threshold = 500
+ins_treshold = 0.8
+area_threshold = 1000
+
+
 YEAST_CATEGORIES = [
     {"color": [0, 0, 0], "isthing": 0, "id": 0, "trainId": 0, "name": "background"},
     {"color": [253, 27, 27], "isthing": 1, "id": 1, "trainId": 1, "name": "cell"},
@@ -50,7 +54,7 @@ def init_context(context):
     cfg.MODEL.INS_EMBED_HEAD.NORM = "BN"
     cfg.MODEL.RESNETS.NORM = "BN"
     # Find a model from detectron2's model zoo. You can use the https://dl.fbaipublicfiles... url as well
-    model_dir = "/opt/nuclio/model_0059999.pth"
+    model_dir = "/opt/nuclio/saved_model_20250701.pth"
     if os.path.exists(model_dir):
         cfg.MODEL.WEIGHTS = os.path.abspath(model_dir)
         predictor = Predictor(cfg)
@@ -67,6 +71,7 @@ def handler(context, event):
     data = event.body
 
     buf = io.BytesIO(base64.b64decode(data["image"]))
+    self_set_ins_threshold = data.get("threshold", ins_treshold)
     image = Image.open(buf)
     if (image.mode == "I;16") | (image.mode == "I;16B") | (image.mode == "I;16L"):
         image = np.array(image)
@@ -85,29 +90,36 @@ def handler(context, event):
     instances = predictions['instances']
     pred_masks = instances.pred_masks
     scores = instances.scores
+    instance_scores = instances.center_scores
     pred_classes = instances.pred_classes
     results = []
-    for box, score, label in zip(pred_masks, scores, pred_classes):
+    for pred_mask, score, ins_score, label in zip(pred_masks, scores, instance_scores, pred_classes):
         label = YEAST_CATEGORIES[int(label)]["name"]
-        print(label, score)
-        if score >= threshold:
-            if box[0,:].any() or box[-1, :].any():
-                continue
-            if box[:, 0].any() or box[:, -1].any():
-                continue
-            area = pred_masks.sum()
-            print(area)
-            if area < area_threshold:
-                continue
-            polygon = to_cvat_polygon(np.array(box))
-            if polygon is not None:
-                results.append({
-                    "confidence": str(float(score)),
-                    "label": label,
-                    "points": polygon,
-                    # "mask": cvat_mask,
-                    "type": "polygon",
-                    })
+
+        if score < threshold:
+            continue
+        if ins_score < self_set_ins_threshold:
+            continue
+        if pred_mask[0,:].any() or pred_mask[-1, :].any():
+            continue
+        if pred_mask[:, 0].any() or pred_mask[:, -1].any():
+            continue
+        area = pred_mask.sum()
+        print(label, score, ins_score, area)
+        if area < area_threshold:
+            continue
+        num, mask = get_largest_object(np.array(pred_mask))
+        if num == 0:
+            continue
+        polygon = to_cvat_polygon(mask)
+        if polygon is not None:
+            results.append({
+                "confidence": str(float(score)),
+                "label": label,
+                "points": polygon,
+                # "mask": cvat_mask,
+                "type": "polygon",
+                })
 
     return context.Response(body=json.dumps(results), headers={},
         content_type='application/json', status_code=200)
@@ -126,7 +138,7 @@ def load_model():
     cfg.MODEL.INS_EMBED_HEAD.NORM = "BN"
     cfg.MODEL.RESNETS.NORM = "BN"
     # Find a model from detectron2's model zoo. You can use the https://dl.fbaipublicfiles... url as well
-    model_dir = "/opt/nuclio/model_0059999.pth"
+    model_dir = "/opt/nuclio/saved_model_20250701.pth"
     if os.path.exists(model_dir):
         cfg.MODEL.WEIGHTS = os.path.abspath(model_dir)
         predictor = Predictor(cfg)
@@ -137,11 +149,31 @@ def load_model():
 
 
 def to_cvat_polygon(mask):
-    contour = find_contours(mask)[0]
+    contour = measure.find_contours(mask)[0]
     contour = np.flip(contour, axis=1)
-    contour = approximate_polygon(contour, tolerance=1)
+    contour = measure.approximate_polygon(contour, tolerance=1)
 
     if len(contour) < 3:
         return None
     else:
         return contour.ravel().tolist()
+
+
+def get_largest_object(mask):
+    """
+    Given a binary mask (2D numpy array), returns:
+    - count: number of connected components (objects)
+    - largest_mask: binary mask of the largest object
+    """
+    labeled = measure.label(mask)  # Assigns a unique label to each connected region
+    props = measure.regionprops(labeled)
+
+    if not props:
+        return 0, np.zeros_like(mask, dtype=bool)
+
+    # Find region with largest area
+    largest = max(props, key=lambda x: x.area)
+
+    # Create a new mask for the largest region
+    largest_mask = labeled == largest.label
+    return len(props), largest_mask

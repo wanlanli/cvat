@@ -32,8 +32,8 @@ spec:
     baseImage: ubuntu:20.04
 
     volumes:
-      - hostPath: /home/liwa/data/oneformer_output/output/model_0059999.pth
-        containerPath: /opt/nuclio/model_0059999.pth
+      - hostPath: /home/liwa/data/oneformer_output/output/saved_model_20250701.pth
+        containerPath: /opt/nuclio/saved_model_20250701.pth
 
     directives:
       preCopy:
@@ -57,6 +57,8 @@ spec:
           value: pip3 install 'git+https://github.com/cocodataset/panopticapi.git'
         - kind: RUN
           value: pip3 install scikit-image
+        - kind: RUN
+          value: pip3 install kornia
         - kind: RUN
           value: ln -s /usr/bin/pip3 /usr/local/bin/pip && ln -s /usr/bin/python3 /usr/bin/python
 

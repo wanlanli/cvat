@@ -418,6 +418,5 @@ volumes:
   cvat_inmem_db:
   cvat_events_db:
   cvat_cache_db:
-
 networks:
   cvat:
