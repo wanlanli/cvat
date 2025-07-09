@@ -1,0 +1,51 @@
+# services:
+#   cvat_server:
+#     volumes:
+#       - cvat_share:/home/django/share:ro
+#   cvat_worker_import:
+#     volumes:
+#       - cvat_share:/home/django/share:ro
+#   cvat_worker_export:
+#     volumes:
+#       - cvat_share:/home/django/share:ro
+#   cvat_worker_annotation:
+#     volumes:
+#       - cvat_share:/home/django/share:ro
+
+# volumes:
+#   cvat_share:
+#     driver_opts:
+#       type: none
+#       device: /home/liwa/data/cvat_mnt
+#       o: bind
+
+
+
+volumes:
+  cvat_db:
+      driver: local
+      driver_opts:
+          type: none
+          device: /home/liwa/data/mnt_cvat/cvat_db
+          o: bind
+  cvat_data:
+      driver: local
+      driver_opts:
+          type: none
+          device: /home/liwa/data/mnt_cvat/data
+          o: bind
+  cvat_keys:
+      driver: local
+      driver_opts:
+          type: none
+          device: /home/liwa/data/mnt_cvat/keys
+          o: bind
+  cvat_logs:
+      driver: local
+      driver_opts:
+          type: none
+          device: /home/liwa/data/mnt_cvat/logs
+          o: bind
+  cvat_inmem_db:
+  cvat_events_db:
+  cvat_cache_db:
