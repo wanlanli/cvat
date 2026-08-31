@@ -19,7 +19,7 @@ from skimage import measure
 
 # scp -r wlli@10.195.59.130:/home/wlli/Data/oneformer_mdel/model_0059999.pth .
 # scp -r wlli@10.195.59.130:/home/wlli/project/PytrochDeepyeastDeploy/saved_model_20250701.pth .
-threshold = 0.5
+threshold = 0.3
 ins_treshold = 0.8
 area_threshold = 1000
 
@@ -54,7 +54,7 @@ def init_context(context):
     cfg.MODEL.INS_EMBED_HEAD.NORM = "BN"
     cfg.MODEL.RESNETS.NORM = "BN"
     # Find a model from detectron2's model zoo. You can use the https://dl.fbaipublicfiles... url as well
-    model_dir = "/opt/nuclio/saved_model_20250701.pth"
+    model_dir = "/opt/nuclio/models/saved_model_20251205.pth"
     if os.path.exists(model_dir):
         cfg.MODEL.WEIGHTS = os.path.abspath(model_dir)
         predictor = Predictor(cfg)
@@ -83,6 +83,7 @@ def handler(context, event):
     print(image.shape)
 
     if context.user_data.model_handler is None:
+        print("load model")
         context.user_data.model_handler = load_model()
 
     predictions = context.user_data.model_handler(image)
@@ -138,7 +139,7 @@ def load_model():
     cfg.MODEL.INS_EMBED_HEAD.NORM = "BN"
     cfg.MODEL.RESNETS.NORM = "BN"
     # Find a model from detectron2's model zoo. You can use the https://dl.fbaipublicfiles... url as well
-    model_dir = "/opt/nuclio/saved_model_20250701.pth"
+    model_dir = "/opt/nuclio/models/saved_model_20251205.pth"
     if os.path.exists(model_dir):
         cfg.MODEL.WEIGHTS = os.path.abspath(model_dir)
         predictor = Predictor(cfg)

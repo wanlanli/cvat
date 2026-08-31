@@ -28,35 +28,38 @@ spec:
   readinessTimeoutSeconds: 600
 
   build:
-    image: cvat.pytorch.facebookresearch.detectron2.panopticdeeplab
-    baseImage: cvat.pytorch.facebookresearch.detectron2.panopticdeeplab.base
+    image: cvat.pth.facebookresearch.detectron2.panopticdeeplab
+    baseImage: ubuntu:20.04
     # volumes:
     #   - hostPath: /home/liwa/data/oneformer_output/output/saved_model_20250701.pth
     #     containerPath: /opt/nuclio/saved_model_20250701.pth
 
     directives:
       preCopy:
-        # - kind: ENV
-        #   value: DEBIAN_FRONTEND=noninteractive
-        # - kind: RUN
-        #   value: apt-get update && apt-get -y install curl git python3 python3-pip
-        # - kind: WORKDIR
-        #   value: /opt/nuclio
-        # - kind: RUN
-        #   value: ls
-        # - kind: RUN
-          # value: pip3 install --no-cache-dir torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.htmltorch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+        - kind: ENV
+          value: DEBIAN_FRONTEND=noninteractive
+        - kind: RUN
+          value: apt-get update && apt-get -y install curl git python3 python3-pip
+        - kind: WORKDIR
+          value: /opt/nuclio
+        - kind: RUN
+          value: ls
+        - kind: RUN
+          value: pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
         - kind: RUN
           value: git clone https://github.com/wanlanli/PytrochDeepyeastDeploy.git
         - kind: WORKDIR
           value: /opt/nuclio/PytrochDeepyeastDeploy
-        # - kind: RUN
-        #   value: >
-        #     pip3 install 'git+https://github.com/facebookresearch/detectron2.git' &&
-        #     pip3 install 'git+https://github.com/cocodataset/panopticapi.git' &&
-        #     pip3 install scikit-image kornia
-        # - kind: RUN
-        #   value: ln -s /usr/bin/pip3 /usr/local/bin/pip && ln -s /usr/bin/python3 /usr/bin/python
+        - kind: RUN
+          value: pip3 install 'git+https://github.com/facebookresearch/detectron2.git'
+        - kind: RUN
+          value: pip3 install 'git+https://github.com/cocodataset/panopticapi.git'
+        - kind: RUN
+          value: pip3 install scikit-image
+        - kind: RUN
+          value: pip3 install kornia
+        - kind: RUN
+          value: ln -s /usr/bin/pip3 /usr/local/bin/pip && ln -s /usr/bin/python3 /usr/bin/python
 
       # postCopy:
       #   - kind: RUN
@@ -81,5 +84,5 @@ spec:
       mountMode: volume
       mounts:
         type: bind
-        source: /home/liwa/data/oneformer_output/models
+        source: /home/liwa/data/mnt_cvat/models
         destination: /opt/nuclio/models
